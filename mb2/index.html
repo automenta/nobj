@@ -1,0 +1,23 @@
+<!-- index.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>TODO</title>
+</head>
+<body>
+<script type="module" language="typescript">
+    import App from '/ui/app';
+    import $ from 'jquery';
+    import { v4 as uuid } from 'uuid';
+
+    let userID = localStorage['userID'];
+    if (!userID) {
+        userID = uuid();
+        localStorage['userID'] = userID;
+    }
+    $('body').append(new App(userID, "todo").ele);
+</script>
+</body>
+</html>

@@ -1,0 +1,36 @@
+{
+  "name": "collaborative-reality-editor",
+  "version": "1.0.0",
+  "main": "src/main.ts",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "dev": "vite",
+    "test": "npm run build ; npx vitest run",
+    "format": "prettier --write .",
+    "dump": "git ls-files | xargs -I{} sh -c 'echo -e \"===== {} =====\\n\"; cat {}; echo -e \"\\n\"'",
+    "dumpclip": "npm run dump | xclip -i",
+    "signal": "PORT=4444 node ./node_modules/y-webrtc/bin/server.js",
+    "server": "node src/server/server.js"
+  },
+  "dependencies": {
+    "@xenova/transformers": "latest",
+    "express": "latest",
+    "jquery": "latest",
+    "idb": "latest",
+    "langchain": "latest",
+    "tesseract.js": "latest",
+    "y-webrtc": "latest",
+    "y-websocket": "latest",
+    "yjs": "latest"
+  },
+  "devDependencies": {
+    "fake-indexeddb": "latest",
+    "prettier": "latest",
+    "ts-node": "latest",
+    "typescript": "latest",
+    "vite": "latest",
+    "vitest": "latest",
+    "rollup": "latest"
+  }
+}

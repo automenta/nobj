@@ -1,0 +1,52 @@
+{
+  "name": "collaborative-reality-editor",
+  "version": "1.0.0",
+  "description": "Decentralized, collaborative, realtime reality editor.",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "crdt",
+    "p2p",
+    "decentralized",
+    "real-time",
+    "collaboration",
+    "yjs",
+    "libp2p",
+    "nodejs",
+    "javascript"
+  ],
+  "author": "SeH",
+  "license": "AGPL",
+  "dependencies": {
+    "@chainsafe/libp2p-gossipsub": "latest",
+    "@chainsafe/libp2p-noise": "latest",
+    "@chainsafe/libp2p-yamux": "latest",
+    "libp2p": "latest",
+    "@libp2p/circuit-relay-v2": "latest",
+    "@libp2p/bootstrap": "latest",
+    "@libp2p/dcutr": "latest",
+    "@libp2p/identify": "latest",
+    "@libp2p/kad-dht": "latest",
+    "@libp2p/pubsub-peer-discovery": "latest",
+    "@libp2p/websockets": "latest",
+    "@chainsafe/libp2p-yamux": "latest",
+    "ipns": "latest",
+    "@multiformats/multiaddr": "latest",
+    "blessed": "latest",
+    "crypto": "latest",
+    "fake-indexeddb": "latest",
+    "uint8arrays": "latest",
+    "uuid": "latest",
+    "y-indexeddb": "latest",
+    "y-websocket": "latest",
+    "yjs": "latest",
+    "y-leveldb": "latest"
+  },
+  "devDependencies": {
+    "eslint": "latest"
+  }
+}

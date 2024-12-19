@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Collaborative Reality Editor</title>
+  </head>
+  <body>
+    <div id="app">
+      <header>
+        <h1>Collaborative Reality Editor</h1>
+      </header>
+      <main>
+        <aside>
+          <nav>
+            <ul>
+              <li><a href="#">Me</a></li>
+              <li><a href="#">Friends</a></li>
+              <li><a href="#">Network</a></li>
+              <li><a href="#">Database</a></li>
+            </ul>
+          </nav>
+          <div class="object-list-container">
+            <h2>Objects</h2>
+            <button id="create-object-button">Create New Object</button>
+            <ul id="object-list"></ul>
+          </div>
+        </aside>
+        <section class="main-content">
+          <div id="user-profile"></div>
+          <div id="content"></div>
+        </section>
+      </main>
+    </div>
+    <script type="module" src="../main.ts"></script>
+  </body>
+</html>

@@ -1,0 +1,4742 @@
+
+> mb2@0.0.0 dump
+> git ls-files | xargs -I{} sh -c 'echo -e "===== {} =====\n"; cat {}; echo -e "\n"'
+
+===== .gitignore =====
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+dist/
+.env
+.aider*
+.idea/
+package-lock.json
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+
+
+===== README.md =====
+
+# Collaborative Reality Editor
+
+## How it works
+  - Write and share thoughts, like a TODO list
+  - Web app for browser
+  - Through user editing and automatic data analysis processes, actionable input evolves into autonomous agents that can achieve results
+  - Stores private user and public community data in the browser (IndexedDB)
+  - Private objects are not shared (new objects are, by default, private)
+
+
+## Search Paradigm
+  + Shared objects can be matched, and these matches return as notifications to the user and are organized as replies-to the source object
+  + Objects containing indefinite properties are like persistent search queries.
+  + Imaginary objects (which act as partial queries) persist until explicitly deleted - because they can represent and track the user's intentions.
+  + Queries in the conventional Web Search paradigm, by contrast, are weak, disposable, and ephemeral.
+  + JSON Semantic representation: Language Models can translate natural language objects to JSON to enable _semantic matching_ *at scale*.
+  + Objects may include definite and indefinite semantic values, referenced in a community schema
+    + _Definite_ - describes reality as it is.  Empirical knowledge, measurements, facts, etc.
+    + _Indefinite_ - (for queries/hypothetical/imaginary objects) describes conditions/acceptability criteria that are tested for matching real objects.
+
+## UI
+  - Main View - displays content, such as an object being viewed, or edited
+  - Sidebar
+    + Menu
+    + Object list:  When an object is clicked, opens in view.  If user is the author, then it's editable, otherwise, it's read-only
+  - Views
+    + **Me**: user profile (user ID, name, icon, etc...); starts as random Anonymous.
+    + **Friends**: with statuses
+    + **Network**: Peers, Traffic, etc.
+    + **Database**: statistics, table view (with sort and filter)
+
+# Implementation & Dependencies
+ * Language: TypeScript/JavaScript (ES6+), object-oriented architecture
+ * User-interface: jQuery + HTML Web Components (only ONE dynamically-generated page)
+ * Uses 'yjs' for realtime CRDT WebRTC data synchronization
+ * Build: 'vite'
+ * Testing: 'vitest'
+
+# Coding
+ * Keep the code clear and compact.
+ * Use comments sparingly, prefering self-documenting code.  Use the latest Javascript language features.  Involve no more than a few helpful common utility libraries.
+ * Where possible, explore ways to generate and minimize the necessary code through clever object-oriented design and metaprogramming.
+
+
+
+===== index.html =====
+
+<!-- index.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>TODO</title>
+</head>
+<body>
+<script type="module" language="typescript">
+    import App from '/ui/app';
+    import $ from 'jquery';
+    import { v4 as uuid } from 'uuid';
+
+    let userID = localStorage['userID'];
+    if (!userID) {
+        userID = uuid();
+        localStorage['userID'] = userID;
+    }
+    $('body').append(new App(userID, "todo").ele);
+</script>
+</body>
+</html>
+
+
+===== package.json =====
+
+{
+  "name": "mb2",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host",
+    "build": "vite build",
+    "preview": "vite preview",
+    "signal": "PORT=4444 node ./node_modules/y-webrtc/bin/server.js",
+    "dump": "git ls-files | xargs -I{} sh -c 'echo -e \"===== {} =====\\n\"; cat {}; echo -e \"\\n\"'",
+    "dumpclip": "npm run dump | xclip -i",
+    "test": "vitest",
+    "test:ui": "vitest --ui",
+    "test:coverage": "vitest run --coverage"
+  },
+  "dependencies": {
+    "@chainsafe/libp2p-gossipsub": "latest",
+    "@chainsafe/libp2p-noise": "latest",
+    "@libp2p/bootstrap": "latest",
+    "@libp2p/interface-peer-id": "latest",
+    "@libp2p/kad-dht": "latest",
+    "@libp2p/mplex": "latest",
+    "@libp2p/peer-id-factory": "latest",
+    "@libp2p/webrtc-star": "latest",
+    "bittorrent-dht": "latest",
+    "cors": "latest",
+    "express": "latest",
+    "jquery": "latest",
+    "libp2p": "latest",
+    "socket.io": "latest",
+    "uuid": "latest",
+    "vite": "latest",
+    "ws": "latest",
+    "y-indexeddb": "latest",
+    "y-leveldb": "latest",
+    "y-webrtc": "latest",
+    "yjs": "latest"
+  },
+  "devDependencies": {
+    "@types/express": "latest",
+    "@types/jquery": "latest",
+    "@types/node": "latest",
+    "@vitest/coverage-v8": "latest",
+    "@vitest/ui": "latest",
+    "vite": "latest",
+    "vitest": "latest"
+  }
+}
+
+
+===== server/README.md =====
+
+Server-side (SuperNode) components
+
+
+===== server/aissist/.gitignore =====
+
+/tmp
+/out-tsc
+
+/node_modules
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+/.pnp
+.pnp.js
+
+.vscode/*
+/eng.traineddata
+db
+
+
+===== server/aissist/index.html =====
+
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Awesome Screenshot Analyzer</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; background: #f9f9f9; }
+        #status { font-weight: bold; color: green; }
+        #data { margin-top: 20px; max-height: 300px; overflow-y: auto; background: #fff; padding: 10px; border: 1px solid #ccc; border-radius: 4px; }
+        pre { background: #f0f0f0; padding: 10px; border-radius: 4px; max-width: 100%; overflow: auto; }
+        #query-section { margin-top: 20px; padding: 10px; background: #fff; border: 1px solid #ccc; border-radius: 4px; }
+        #query-section h3 { margin-top: 0; }
+        label { display: inline-block; width: 100px; }
+        input[type="datetime-local"] { width: 250px; }
+        button { padding: 5px 10px; margin-top: 10px; cursor: pointer; }
+        #query-results { margin-top: 20px; max-height: 300px; overflow-y: auto; background: #fff; padding: 10px; border: 1px solid #ccc; border-radius: 4px; }
+        #notification { position: fixed; top: 20px; right: 20px; background: #444; color: #fff; padding: 15px; border-radius: 4px; opacity: 0.9; display: none; z-index: 1000; }
+    </style>
+
+</head>
+<body>
+<p>Status: <span id="status">Running</span></p>
+<div id="data"><p>No data collected yet.</p></div>
+
+<h2>Timeline</h2>
+<div id="timeline" style="display:flex; overflow-x:auto; border:1px solid #ccc; padding:10px; gap:10px;">
+    <!-- Timeline items inserted dynamically -->
+</div>
+<div id="timeline-details" style="margin-top:20px;">
+    <h3>Details</h3>
+    <div id="timeline-details-content"></div>
+</div>
+
+<div id="query-section">
+    <h3>Query Snapshots by Time Range</h3>
+    <label for="start">Start Time:</label><input type="datetime-local" id="start">
+    <br><br>
+    <label for="end">End Time:</label><input type="datetime-local" id="end">
+    <br><br>
+    <button id="query-btn">Query</button>
+    <div id="query-results"><p>No query results.</p></div>
+</div>
+
+
+
+<div id="notification"></div>
+<script src="./renderer.js"></script>
+</body>
+</html>
+
+
+===== server/aissist/main.js =====
+
+const { app, BrowserWindow, Tray, Menu, ipcMain } = require('electron');
+const path = require('path');
+
+let mainWindow;
+let tray;
+let isPaused = false;
+
+function createWindow() {
+    mainWindow = new BrowserWindow({
+        width: 1200,
+        height: 900,
+        webPreferences: {
+            nodeIntegration: true,
+            contextIsolation: false,
+            nodeIntegrationInWorker: true,
+            devTools: true
+        }
+    });
+    mainWindow.loadFile('index.html');
+    mainWindow.on('close', (event) => {
+        event.preventDefault();
+        mainWindow.hide();
+    });
+}
+
+function updateTrayMenu() {
+    tray.setContextMenu(Menu.buildFromTemplate([
+        { label: 'Open', click: () => mainWindow.show() },
+        {
+            label: isPaused ? 'Resume Analysis' : 'Pause Analysis',
+            click: () => {
+                isPaused = !isPaused;
+                updateTrayMenu();
+                mainWindow.webContents.send('update-status', isPaused ? 'Paused' : 'Running');
+            }
+        },
+        { label: 'Exit', click: () => app.quit() }
+    ]));
+}
+
+function createTray() {
+    const trayIconPath = path.join(/*__dirname, 'assets', */'/home/me/d/doom.png');
+    tray = new Tray(trayIconPath);
+    updateTrayMenu();
+    tray.setToolTip('Screenshot Analyzer');
+}
+
+app.whenReady().then(() => { createWindow(); createTray(); });
+app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
+app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
+
+
+===== server/aissist/package.json =====
+
+{
+  "name": "aissist",
+  "version": "1.0.0",
+  "description": "",
+  "main": "main.js",
+  "scripts": {
+    "start": "npx electron . --no-sandbox"
+  },
+  "dependencies": {
+    "mb2": "../../",
+    "@evgenys91/active-win": "latest",
+    "axios": "latest",
+    "dotenv": "latest",
+    "form-data": "latest",
+    "graphlib": "latest",
+    "level": "latest",
+    "node-fetch": "latest",
+    "node-global-key-listener": "latest",
+    "node-tesseract-ocr": "latest",
+    "screenshot-desktop": "latest",
+    "sharp": "latest",
+    "systeminformation": "latest",
+    "tesseract.js": "latest"
+  },
+  "devDependencies": {
+    "@types/node": "latest",
+    "@types/screenshot-desktop": "latest",
+    "electron": "latest",
+    "typescript": "latest"
+  },
+  "private": true
+}
+
+
+===== server/aissist/renderer.js =====
+
+const {LeveldbPersistence} = require('y-leveldb');
+const { ipcRenderer } = require('electron');
+const { Graph } = require('graphlib');
+const axios = require('axios');
+const screenshotDesktop = require('screenshot-desktop');
+const sharp = require('sharp');
+const si = require('systeminformation');
+const activeWin = require('@evgenys91/active-win');
+const crypto = require('crypto');
+const {Level} = require('level');
+const fs = require('fs').promises;
+const fssync = require('fs');
+const path = require('path');
+const tesseract = require('node-tesseract-ocr');
+
+const interestingnessWeights = {
+    screenshotChange: 1.0,
+    windowChange: 1.0,
+    processChange: 1.0,
+    userActivity: 1.0
+};
+
+// UI Updates from Main
+ipcRenderer.on('update-status', (event, status) => {
+    const statusElem = document.getElementById('status');
+    statusElem.innerText = status;
+    statusElem.style.color = status === 'Paused' ? 'red' : 'green';
+});
+
+//////////////////////////////
+// Utils & DB
+//////////////////////////////
+const Utils = {
+    delay: ms => new Promise(r => setTimeout(r, ms)),
+    getEnvNumber: (key, def) => isNaN(parseInt(process.env[key])) ? def : parseInt(process.env[key]),
+    getEnvString: (key, def) => process.env[key] || def,
+    showNotification: (title, msg) => {
+        const n = document.getElementById('notification');
+        n.innerText = `${title}: ${msg}`;
+        n.style.display = 'block';
+        setTimeout(() => { n.style.display = 'none'; }, 5000);
+    },
+    hashBuffer: buffer => crypto.createHash('sha256').update(buffer).digest('hex')
+};
+
+const dbPath = path.join(process.cwd(), 'db');
+const imagesDir = path.join(dbPath, 'images');
+if (!fssync.existsSync(imagesDir)) {
+    fssync.mkdirSync(imagesDir, { recursive: true });
+}
+
+
+//const { DB } = require('../../src/db.js');
+//const db = new DB('aissist_user', new LeveldbPersistence(dbPath)); // Use a dedicated user ID for aissist
+const db = new LeveldbPersistence(dbPath);
+
+
+async function storeSnapshotInDB(snapshot) { //Consider removing this function if no longer needed.
+    const tsKey = snapshot.timestamp.toISOString();
+    // Save the image as a file
+    const imgHash = Utils.hashBuffer(snapshot.screenshot);
+    const imgFilename = `${imgHash}.jpg`;
+    const imgPath = path.join(imagesDir, imgFilename);
+
+    try {
+        await fs.writeFile(imgPath, snapshot.screenshot);
+    } catch (err) {
+        console.error("Failed to write image:", err);
+    }
+
+    // Store snapshot metadata (without the raw screenshot)
+    const { screenshot, ...meta } = snapshot;
+    meta.timestamp = tsKey;
+    // Store a reference to the image filename
+    meta.screenshotRef = imgFilename;
+
+    await db.put(`snapshot:${tsKey}`, meta);
+}
+
+async function querySnapshotsFromDB(start, end) {
+    const query = {
+        gte: `snapshot:${start.toISOString()}`,
+        lte: `snapshot:${end.toISOString()}`
+    };
+    const snapshots = [];
+    for await (const [k, v] of db.iterator(query))
+        snapshots.push(v);
+    return snapshots;
+}
+
+async function getRecentSnapshots(count) {
+    const query = {
+        reverse: true, limit: count
+    };
+    const snapshots = [];
+    for await (const [k,v] of db.iterator(query))
+        snapshots.push(v);
+    // The snapshots are returned in reverse chronological order, which might be fine
+    return snapshots;
+}
+
+//////////////////////////////
+// Tools
+//////////////////////////////
+class Tool {
+    constructor(name, cooldownMs, threshold) {
+        this.name = name;
+        this.cooldownMs = cooldownMs;
+        this.threshold = threshold;
+        this.lastRun = 0;
+    }
+    canRun(snapshot) {
+        return (Date.now() - this.lastRun > this.cooldownMs) && (snapshot.interestingness >= this.threshold);
+    }
+    recordRun() { this.lastRun = Date.now(); }
+}
+
+class OCRTool extends Tool {
+    constructor(cooldown=5000, thresh=0.5) { super('OCR', cooldown, thresh); }
+    async run(snapshot) {
+        const tmpPath = path.join(process.cwd(), `ocr_${Date.now()}.png`);
+        try {
+            await fs.writeFile(tmpPath, snapshot.screenshot);
+            const text = await tesseract.recognize(tmpPath, { lang: 'eng', oem: 1, psm: 3 });
+            snapshot.ocrResult = { text: text.trim(), confidence: 0 };
+        } catch { snapshot.ocrResult = { text: '', confidence: 0 }; }
+        finally { await fs.unlink(tmpPath).catch(()=>{}); }
+        this.recordRun();
+    }
+}
+
+class VisionLLMTool extends Tool {
+    constructor(url, model, cooldown=120000, thresh=0.7) {
+        super('VisionLLM', cooldown, thresh);
+        this.url = url; this.model = model;
+    }
+    async run(snapshot) {
+        try {
+            const resp = await axios.post(this.url, {
+                model: this.model,
+                messages: [{ role: 'user', content: 'Analyze screenshot.', images: [snapshot.screenshot.toString('base64')] }],
+                stream: false
+            });
+            snapshot.llmAnalysis = snapshot.llmAnalysis || {};
+            snapshot.llmAnalysis.vision = resp.data?.message?.content || 'No response';
+        } catch { snapshot.llmAnalysis = { ...snapshot.llmAnalysis, vision: 'Vision analysis failed.' }; }
+        this.recordRun();
+    }
+}
+
+class TextLLMTool extends Tool {
+    constructor(url, model, cooldown=60000, thresh=0.9) {
+        super('TextLLM', cooldown, thresh);
+        this.url = url; this.model = model;
+    }
+    async run(snapshot) {
+        const recent = await getRecentSnapshots(5);
+        const prompt = recent.map((s,i)=>`Snapshot ${i+1}:\nOCR:${s.ocrResult?.text||''}\nVision:${s.llmAnalysis?.vision||''}`).join('\n\n');
+        const userPrompt = `Given these snapshots, infer any possible user goals or intentions:\n\n${prompt}\n\nUser goals:`;
+
+        try {
+            const resp = await axios.post(this.url, {
+                model: this.model,
+                messages: [{ role: 'user', content: userPrompt }],
+                stream: false
+            });
+            snapshot.llmAnalysis = snapshot.llmAnalysis || {};
+            snapshot.llmAnalysis.text = resp.data?.message?.content || 'No response';
+        } catch { snapshot.llmAnalysis = { ...snapshot.llmAnalysis, text: 'Text analysis failed.' }; }
+        this.recordRun();
+    }
+}
+
+//////////////////////////////
+// Collectors
+//////////////////////////////
+class ProcessCollector {
+    constructor(topN=5){this.topN=topN;}
+    async collect() {
+        const procs = await si.processes();
+        const byCPU = procs.list.sort((a,b)=>b.cpu-a.cpu).slice(0,this.topN);
+        const byMem = procs.list.sort((a,b)=>b.memRss - a.memRss).slice(0,this.topN);
+        const combined = [...byCPU,...byMem];
+        return Array.from(new Map(combined.map(p=>[p.pid,{pid:p.pid,name:p.name,cpu:+p.cpu.toFixed(2),memory:+(p.memRss/(1024*1024)).toFixed(2)}])).values());
+    }
+}
+
+class WindowCollector {
+    async collect() {
+        try {
+            const w = await activeWin();
+            if(!w) return {title:'Unknown',owner:'Unknown',processId:-1,bounds:{}};
+            return { title:w.title||'No Title', owner:w.owner?.name||'Unknown', processId:w.id||-1, bounds:w.bounds||{} };
+        }catch{ return {title:'Error',owner:'Error',processId:-1,bounds:{}}; }
+    }
+}
+
+class DuplicateDetector {
+    constructor(){ this.prevHash = null; }
+    isDuplicate(buffer){
+        const h = Utils.hashBuffer(buffer);
+        if(this.prevHash===h) return true;
+        this.prevHash=h;return false;
+    }
+}
+
+//////////////////////////////
+// Snapshot Manager
+//////////////////////////////
+class SnapshotManager {
+    constructor(subRegion) {
+        this.subRegion=subRegion;
+        this.processCollector=new ProcessCollector();
+        this.windowCollector=new WindowCollector();
+        this.duplicateDetector=new DuplicateDetector();
+        this.tools=[
+            new OCRTool(),
+            new VisionLLMTool(Utils.getEnvString('VISION_OLLAMA_URL','http://localhost:11434/api/chat'), Utils.getEnvString('VISION_MODEL','llava:7b')),
+            new TextLLMTool(Utils.getEnvString('NON_VISION_OLLAMA_URL','http://localhost:11434/api/chat'), Utils.getEnvString('NON_VISION_MODEL','llava:7b'))
+        ];
+        this.lastScreenshotHash=null;
+        this.lastActiveWindow=null;
+        this.lastTopProcess=null;
+    }
+
+    async captureScreenshot(){
+        const buf = await screenshotDesktop({format:'png'});
+        let finalBuf = buf;
+        // Convert PNG to JPEG
+        finalBuf = await sharp(buf).jpeg({quality:80}).toBuffer();
+        if(this.subRegion){
+            const {x,y,width,height}=this.subRegion;
+            finalBuf = await sharp(finalBuf).extract({left:x,top:y,width,height}).jpeg({quality:80}).toBuffer();
+        }
+        return finalBuf;
+    }
+
+    computeInterestingness(snap) {
+        // Base score
+        let score=0.5;
+
+        // Check differences in screenshot
+        const currHash = Utils.hashBuffer(snap.screenshot);
+        if (this.lastScreenshotHash && this.lastScreenshotHash!==currHash) score+=0.3 * interestingnessWeights.screenshotChange;
+
+        // Check window change
+        if (this.lastActiveWindow && this.lastActiveWindow!==snap.activeWindow.title) score+=0.2 * interestingnessWeights.windowChange;
+
+        // Check top process change
+        const topProc = snap.processes?.[0]?.name||'none';
+        if(this.lastTopProcess && this.lastTopProcess!==topProc) score+=0.1 * interestingnessWeights.processChange;
+
+        // Simulate user activity factor
+        const userActivity = Math.random(); // placeholder
+        score += (userActivity - 0.5) * 0.2 * interestingnessWeights.userActivity;
+
+        // Clamp score
+        score = Math.max(0, Math.min(score,1.0));
+
+        // Update last-known states
+        this.lastScreenshotHash=currHash;
+        this.lastActiveWindow=snap.activeWindow.title;
+        this.lastTopProcess=topProc;
+
+        return score;
+    }
+
+    async createSnapshot() {
+        const buf=await this.captureScreenshot();
+        const dup=this.duplicateDetector.isDuplicate(buf);
+        const ts=new Date();
+        let processes=[],activeWindow={};
+        if(!dup) [processes,activeWindow]=await Promise.all([this.processCollector.collect(), this.windowCollector.collect()]);
+        const snap={timestamp:ts,processes,activeWindow,screenshot:buf,ocrResult:{text:'',confidence:0},llmAnalysis:{},isDuplicate:dup};
+        snap.interestingness=dup?0:this.computeInterestingness(snap);
+        for(const t of this.tools) if(!dup && t.canRun(snap)) await t.run(snap);
+        return snap;
+    }
+}
+
+//////////////////////////////
+// Analyzer
+//////////////////////////////
+class ScreenshotAnalyzer {
+    constructor(config){
+        this.cfg=config;
+        this.snapMgr=config.snapshotManager;
+        this.paused=false;
+        this.baseInterval = this.cfg.analysisInterval; // e.g. 10s default
+        this.minInterval = 5000; // 5s minimum
+        this.maxInterval = 60000; // 60s maximum
+    }
+    async run(onUpdate,onNotify){
+        while(true){
+            if(!this.paused){
+                try{
+                    const snap=await this.snapMgr.createSnapshot();
+                    await storeSnapshotInDB(snap);
+                    onUpdate(snap);
+
+                    // Adjust interval based on interestingness
+                    let factor = 1.0;
+                    if(snap.interestingness > 0.8) factor = 0.5;
+                    else if(snap.interestingness < 0.3) factor = 2.0;
+
+                    const dynamicInterval = Math.min(
+                        Math.max(this.baseInterval * factor, this.minInterval),
+                        this.maxInterval
+                    );
+                    await Utils.delay(dynamicInterval);
+
+                    continue;
+                }catch(e){
+                    onNotify('Error',e.message||e);
+                    console.log(e);
+                }
+            }
+            await Utils.delay(this.cfg.analysisInterval);
+        }
+    }
+    setPaused(p){this.paused=p;}
+}
+
+//////////////////////////////
+// Config & Start
+//////////////////////////////
+class Config {
+    constructor(){
+        this.analysisInterval=Utils.getEnvNumber('ANALYSIS_INTERVAL',10000);
+        this.subRegion={x:0,y:0,width:640,height:480};
+        this.snapshotManager=new SnapshotManager(this.subRegion);
+    }
+}
+
+const config=new Config();
+const analyzer=new ScreenshotAnalyzer(config);
+
+function updateStatus(msg,col='green'){
+    const e=document.getElementById('status');
+    e.innerText=msg; e.style.color=col;
+}
+function updateData(snap){
+    document.getElementById('data').innerHTML = `<pre>${JSON.stringify(snap,(k,v)=>k==='screenshot'?'[Image Buffer Omitted]':v,2)}</pre>`;
+}
+function displayNotification(t,m){
+    Utils.showNotification(t,m);
+    if(t==='Paused') {
+        updateStatus('Paused','red');
+        analyzer.setPaused(true);
+    }
+    if(t==='Resumed'){
+        updateStatus('Running','green');
+        analyzer.setPaused(false);
+    }
+    if(t==='Error')updateStatus(`Error: ${m}`,'red');
+}
+
+// Query
+document.getElementById('query-btn').addEventListener('click', async()=>{
+    const startInput=document.getElementById('start').value;
+    const endInput=document.getElementById('end').value;
+    if(!startInput||!endInput){alert('Provide start/end times');return;}
+    const st=new Date(startInput), en=new Date(endInput);
+    if(st>en){alert('Start must be before end');return;}
+    const snaps=await querySnapshotsFromDB(st,en);
+    const r=document.getElementById('query-results');
+    r.innerHTML='';
+    if(snaps.length===0){r.innerHTML='<p>No snapshots</p>';return;}
+    snaps.forEach((s,i)=>{
+        const pre=document.createElement('pre');
+        pre.textContent=`Snapshot ${i+1}:\n`+JSON.stringify(s,(k,v)=>k==='screenshotRef'?`[Image: ${s.screenshotRef}]`:v,2);
+        r.appendChild(pre);
+    });
+});
+
+async function loadTimeline(count=50) {
+    const snaps = await getRecentSnapshots(count);
+    const timeline = document.getElementById('timeline');
+    timeline.innerHTML = '';
+    for (const snap of snaps) {
+        const div = document.createElement('div');
+        div.style.cursor = 'pointer';
+        div.style.display = 'flex';
+        div.style.flexDirection = 'column';
+        div.style.alignItems = 'center';
+        div.style.fontSize = '12px';
+
+        // Choose an icon based on top process
+        // const topProc = snap.processes?.[0]?.name || 'generic';
+        // let icon = '🖼️';
+        // if (topProc.toLowerCase().includes('chrome')) icon = '🌐';
+        // else if (topProc.toLowerCase().includes('code')) icon = '💻';
+        // else if (topProc.toLowerCase().includes('word')) icon = '📝';
+        // const iconElem = document.createElement('div');
+        // iconElem.textContent = icon;
+        // iconElem.style.fontSize = '24px';
+        // div.appendChild(iconElem);
+
+        const url = URL.createObjectURL(new Blob([await fs.readFile(
+            path.join('db/images', snap.screenshotRef)
+        )], {type: 'image/jpeg'}));
+
+        const imgElem = document.createElement('img');
+        imgElem.src = url;
+        imgElem.width = 100; // small thumbnail
+        div.appendChild(imgElem);
+
+        const timeElem = document.createElement('div');
+        timeElem.textContent = new Date(snap.timestamp).toLocaleTimeString();
+        div.appendChild(timeElem);
+
+        div.addEventListener('click', () => {
+            document.getElementById('timeline-details-content').innerHTML =
+                `<pre>${JSON.stringify(snap,(k, v)=>
+                    k==='screenshotRef'?`[Stored as ${snap.screenshotRef}]`:v,2)}</pre>`;
+        });
+
+        timeline.appendChild(div);
+    }
+}
+
+// Initial load of timeline
+loadTimeline();
+// Periodic refresh of timeline to animate changes
+setInterval(() => {
+    loadTimeline();
+}, 10000);
+
+analyzer.run(updateData,displayNotification);
+
+
+===== server/aissist/tsconfig.json =====
+
+{
+  "compilerOptions": {
+    "target": "ES6",
+    "module": "commonjs",
+    "outDir": "./dist",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true
+  },
+  "include": ["./src/**/*"]
+}
+
+===== server/node.ts =====
+
+import express from 'express';
+import http from 'http';
+import path from 'path';
+import { Server as SocketIOServer, Socket } from 'socket.io';
+import { createServer as viteServer } from 'vite';
+import {Tool, OCRTool, VisionLLMTool, TextLLMTool} from './aissist/tools'; // Import tools
+import {SnapshotManager} from './aissist/snapshotter';
+
+const PORT = 3000;
+
+//////////////////////////////
+// Utils
+//////////////////////////////
+const Utils = {
+    delay: ms => new Promise(r => setTimeout(r, ms)),
+    getEnvNumber: (key, def) => isNaN(parseInt(process.env[key])) ? def : parseInt(process.env[key]),
+    getEnvString: (key, def) => process.env[key] || def,
+};
+
+//////////////////////////////
+// Plugin Management
+//////////////////////////////
+const activePlugins = {};
+
+async function loadPlugin(pluginName) {
+    switch (pluginName) {
+        case 'ocr': return new OCRTool();
+        case 'vision': return new VisionLLMTool(Utils.getEnvString('VISION_OLLAMA_URL','http://localhost:11434/api/chat'), Utils.getEnvString('VISION_MODEL','llava:7b'));
+        case 'summary': return new TextLLMTool(Utils.getEnvString('NON_VISION_OLLAMA_URL','http://localhost:11434/api/chat'), Utils.getEnvString('NON_VISION_MODEL','llava:7b'));
+        default: throw new Error(`Unknown plugin: ${pluginName}`);
+    }
+}
+
+async function togglePlugin(pluginName, enable) {
+    if (enable) {
+        if (!activePlugins[pluginName]) activePlugins[pluginName] = await loadPlugin(pluginName);
+    } else {
+        delete activePlugins[pluginName]; // Stop and remove the plugin
+    }
+    io.emit('plugin-status', activePlugins); // Broadcast status update
+}
+
+const PORT = 3000;
+
+(async () => {
+    const app = express();
+
+    app.use((await viteServer({
+        server: { middlewareMode: 'html' },
+        root: path.resolve('../'),
+    })).middlewares);
+
+    const httpServer = http.createServer(app);
+
+    const io = new SocketIOServer(httpServer, {
+        cors: { origin: '*' },
+    });
+
+
+    // const appConfig = { }
+    // const plugins: { [pluginName: string]: Plugin } = {};
+    // for (const pluginName in appConfig.plugins) {
+    //     if (appConfig.plugins[pluginName].enabled) {
+    //         const plugin = await loadPlugin(pluginName);
+    //         plugins[pluginName] = plugin;
+    //         await plugin.init(io, appConfig.plugins[pluginName]);
+    //         await plugin.start();
+    //     }
+    // }
+
+    function wsConnect(s: Socket) {
+        console.log('User connected:', s.id);
+
+        s.on('signal', (message) => {
+            const { target, data } = message;
+            console.log(`Relaying message from ${s.id} to ${target}`);
+            io.to(target).emit('signal', { sender: s.id, data });
+        });
+
+        s.on('join', (roomId) => {
+            s.join(roomId);
+            console.log(`${s.id} joined room: ${roomId}`);
+            s.to(roomId).emit('user-joined', { userId: s.id });
+        });
+
+        s.on('join', (roomId) => {
+            s.join(roomId);
+            console.log(`${s.id} joined room: ${roomId}`);
+            s.to(roomId).emit('user-joined', { userId: s.id });
+        });
+
+        s.on('toggle-plugin', async (pluginName, enable) => {
+            try {
+                await togglePlugin(pluginName, enable);
+            } catch (e) {
+                console.error(`Failed to toggle plugin ${pluginName}:`, e);
+                s.emit('plugin-error', pluginName, e.message);
+            }
+        });
+
+        s.on('disconnect', () => {
+            console.log('User disconnected:', s.id);
+        });
+
+        // // Generic plugin message handler
+        // s.on('plugin-message', async (pluginName, topic, message) => {
+        //     if (plugins[pluginName] && plugins[pluginName].handleMessage) {
+        //         await plugins[pluginName].handleMessage(topic, message);
+        //     }
+        // });
+    }
+
+    io.on('connection', (socket) => wsConnect(socket));
+
+
+    // Define HTTP routes
+    app.get('/status', (req, res) => {
+        res.json({ status: 'OK', timestamp: new Date() });
+    });
+
+    // Snapshot manager
+    const snapshotManager = new SnapshotManager();
+
+    // Start analysis loop
+    const analysisInterval = Utils.getEnvNumber('ANALYSIS_INTERVAL', 10000);
+    setInterval(async () => {
+        const snap = await snapshotManager.createSnapshot();
+        for (const pluginName in activePlugins) {
+            const plugin = activePlugins[pluginName];
+            if (plugin.canRun(snap)) {
+                try {
+                    await plugin.run(snap);
+                } catch (e) {
+                    console.error(`Plugin ${pluginName} error:`, e);
+                }
+            }
+        }
+        io.emit('snapshot', snap); // Broadcast snapshot data
+    }, analysisInterval);
+
+    httpServer.listen(PORT, () => {
+        console.log(`Signaling server is running at http://localhost:${PORT}`);
+    });
+})();
+
+
+//////////////////////////////
+// Aissist tools (moved from renderer.js)
+//////////////////////////////
+// ... (Tool, OCRTool, VisionLLMTool, TextLLMTool, SnapshotManager code from renderer.js)
+// ... but remove the ipcRenderer parts and the UI update functions (updateStatus, updateData, displayNotification)
+// ... and export the classes:
+export { Tool, OCRTool, VisionLLMTool, TextLLMTool };
+export { SnapshotManager };
+
+
+
+
+===== server/p2p.ts =====
+
+import { createLibp2p } from 'libp2p';
+import { bootstrap } from '@libp2p/bootstrap';
+import { kadDHT } from '@libp2p/kad-dht';
+import { webRTCStar } from '@libp2p/webrtc-star';
+import { GossipSub } from '@chainsafe/libp2p-gossipsub';
+import { multiaddr } from 'multiaddr';
+import { MainlineDHT } from 'bittorrent-dht';
+import { EventEmitter } from 'events';
+import { noise } from '@chainsafe/libp2p-noise';
+import { mplex } from '@libp2p/mplex';
+import { PeerId } from '@libp2p/interface-peer-id';
+
+import { logger } from 'libp2p'; //TODO ComponentLogger??
+
+interface P2PNodeOptions {
+    peerId: PeerId;
+    bootstrapList?: string[];
+}
+
+class P2PNode extends EventEmitter {
+    private node: Node;
+    private dht: any;
+
+    constructor(options: P2PNodeOptions) {
+        super();
+        this.node = this.createLibp2pNode(options);
+        this.dht = new MainlineDHT();
+    }
+
+    private createLibp2pNode(options: P2PNodeOptions): Node {
+        const bs = options.bootstrapList || [
+            "/dns4/bootstrap.libp2p.io/tcp/443/wss/p2p-webrtc-star/",
+            "/dns4/bootstrap.libp2p.io/tcp/443/wss/p2p-webrtc-star/"
+        ];
+
+        return createLibp2p({
+            peerId: options.peerId,
+            addresses: {
+                listen: [
+                    '/dns4/localhost/tcp/0/ws',
+                ]
+            },
+            transports: [
+                new webRTCStar()
+            ],
+            connectionEncryption: [
+                new noise()
+            ],
+            streamMuxers: [
+                new mplex()
+            ],
+            peerDiscovery: [
+                new bootstrap({ list: bs })
+            ],
+            dht: new kadDHT(),
+            pubsub: new GossipSub({
+                logger: logger
+            }),
+        });
+        }
+
+    async start() {
+        await this.node.start();
+        this.setupEventListeners();
+        this.dht.listen(6881, () => console.log('Mainline DHT listening on port 6881'));
+    }
+
+    async stop() {
+        await this.node.stop();
+        this.dht.destroy();
+        }
+
+    private setupEventListeners() {
+        this.node.connectionManager.addEventListener('peer:connect', e => {
+            const connection = e.detail;
+            console.log('Connected to:', connection.remotePeer.toString());
+            this.emit('peer:connect', connection);
+        });
+
+        this.node.pubsub.addEventListener('message', e => {
+            const msg = e.detail;
+            console.log('Received message:', msg.data.toString());
+            this.emit('message', msg);
+        });
+
+        this.dht.on('peer', peer => {
+            console.log('Found peer:', peer);
+            this.emit('dht:peer', peer);
+        });
+    }
+
+    async sendGossipMessage(topic: string, message: string) {
+        await this.node.pubsub.publish(topic, Buffer.from(message));
+        }
+
+    async getPeers() {
+        return this.node.peerStore.getPeers();
+    }
+
+    async findNode(id: string) {
+        return new Promise((resolve, reject) => {
+            this.dht.lookup(id, (err, res) => {
+                if (err) reject(err);
+                resolve(res);
+            });
+        });
+        }
+    }
+
+export default P2PNode;
+
+
+===== src/db.ts =====
+
+// src/db.ts
+import * as Y from 'yjs';
+import { IndexeddbPersistence } from 'y-indexeddb';
+import { LeveldbPersistence } from 'y-leveldb';
+import NObject from './obj';
+import { v4 as uuid } from 'uuid';
+
+class DB {
+    readonly doc: Y.Doc;
+    public readonly index: Y.Map<any>;
+
+    constructor(readonly userID: string, provider?: IndexeddbPersistence | LeveldbPersistence) {
+        this.userID = userID;
+        this.doc = new Y.Doc();
+
+        if (!provider)
+            provider = new IndexeddbPersistence('todo_' + userID, this.doc);
+        else
+            provider.bindState(this.doc.name, this.doc);
+
+        provider.on('synced', () => console.log('Synced'));
+
+        this.index = this.doc.getMap('objects');
+    }
+
+    create(): NObject {
+        const obj = new NObject(this.doc, uuid());
+        obj.init(this.userID);
+        this.index.set(obj.id, obj.toJSON());
+        return obj;
+    }
+
+    get(id: string): NObject | null {
+        try { return new NObject(this.doc, id); }
+        catch { return null; }
+    }
+
+    delete(id: string): boolean {
+        const obj = this.get(id);
+        if (!obj) return false;
+
+        // Cleanup references
+        this.list().forEach(other => {
+            if (other.replies.has(id)) other.removeReply(id);
+            if (other.repliesTo.has(id)) other.removeReplyTo(id);
+        });
+
+        this.doc.transact(() => this.index.delete(id));
+        return true;
+    }
+
+    list = (): NObject[] =>
+        Array.from(this.index.keys())
+            .map(id => this.get(id))
+            .filter((obj): obj is NObject => obj !== null);
+
+    listByTag = (tag: string) =>
+        this.list().filter(obj => obj.tags.includes(tag));
+
+    listByAuthor = (author: string) =>
+        this.list().filter(obj => obj.author === author);
+
+    search = (query: string): NObject[] => {
+        const q = query.toLowerCase();
+        return this.list().filter(obj =>
+            obj.name.toLowerCase().includes(q) ||
+            obj.tags.some(tag => tag.toLowerCase().includes(q))
+        );
+    }
+
+    createReply(parentId: string, name?: string): NObject | null {
+        const parent = this.get(parentId);
+        if (!parent) return null;
+
+        const reply = this.create();
+        reply.name = name;
+        reply.addReplyTo(parentId);
+        parent.addReply(reply.id);
+        return reply;
+    }
+
+    getReplies = (id: string): NObject[] =>
+        Array.from(this.get(id)?.replies ?? [])
+            .map(rid => this.get(rid))
+            .filter((r): r is NObject => r !== null);
+
+    getRepliesTo = (id: string): NObject[] =>
+        Array.from(this.get(id)?.repliesTo ?? [])
+            .map(pid => this.get(pid))
+            .filter((p): p is NObject => p !== null);
+
+
+    // observe = (fn: Observer): void => this.index.observe(fn);
+    // observeObject = (id: string, fn: Observer): void =>
+    //     this.get(id)?.observe(fn);
+
+    objText(pageId: string) {
+        const page = this.get(pageId);
+        return page ? page.text : null;
+    }
+
+    objName(pageId:string, title:string):void {
+        const page = this.get(pageId);
+        if (page)
+            page.name = title;
+    }
+
+    objPublic(pageId:string, isPublic:boolean):void {
+        const page = this.get(pageId);
+        if (page)
+            page.public = isPublic;
+    }
+
+}
+export default DB;
+
+===== src/events.ts =====
+
+/*
+Event Emitter with WeakMap for auto-cleanup and pattern matching.  Derived from 'mitt'
+* - Memory-safe with WeakMap handlers
+* - Pattern matching ('network:*', 'auth:*', '*')
+* - Type-safe events and handlers
+* - Auto-cleanup on handler removal
+* - Error boundary protection
+*/
+export type EventType = string | symbol;
+export type Handler<T = unknown> = (event: T) => void;
+export type WildcardHandler<T = Record<EventType, unknown>> = (type: keyof T, event: T[keyof T]) => void;
+
+type EventStore<T> = {
+    ons: Set<Handler<T>>,
+    wild: boolean
+};
+
+type HandlerStore<T extends Record<EventType, unknown>> = Map<
+    keyof T | '*' | string,
+    EventStore<T[keyof T]>
+>;
+
+type WeakHandlerMap<T extends Record<EventType, unknown>> = WeakMap<object, HandlerStore<T>>;
+
+export interface Emitter<T extends Record<EventType, unknown>> {
+    on<K extends keyof T>(type: K | '*' | string, handler: K extends '*' ? WildcardHandler<T> : Handler<T[K]>): () => void;
+    off<K extends keyof T>(type: K | '*' | string, handler?: K extends '*' ? WildcardHandler<T> : Handler<T[K]>): void;
+    emit<K extends keyof T>(type: K, event?: T[K]): void;
+    clear(): void;
+}
+
+export function mitt<T extends Record<EventType, unknown>>(target: object = Object.create(null)): Emitter<T> {
+    const handlers: WeakHandlerMap<T> = new WeakMap();
+    const store = new Map<keyof T | '*' | string, EventStore<T[keyof T]>>();
+    handlers.set(target, store);
+
+    const get = (type: keyof T | '*' | string): EventStore<T[keyof T]> => {
+        let entry = store.get(type);
+        if (!entry) {
+            entry = {
+                ons: new Set(),
+                wild: type === '*' || (typeof type === 'string' && type.endsWith('*'))
+            };
+            store.set(type, entry);
+        }
+        return entry;
+    };
+
+    const getHandlers = (type: string): [Handler<T[keyof T]>, boolean][] => {
+        const result: [Handler<T[keyof T]>, boolean][] = [];
+
+        // Exact handlers first
+        const exact = store.get(type);
+        if (exact)
+            exact.ons.forEach(h => result.push([h, false]));
+
+        // Pattern match handlers
+        store.forEach((entry, pattern) => {
+            if (entry.wild && pattern !== '*') {
+                const prefix = (pattern as string).slice(0, -1);
+                if (type.startsWith(prefix))
+                    entry.ons.forEach(h => result.push([h, true]));
+            }
+        });
+
+        // Global handlers last
+        const global = store.get('*');
+        if (global) global.ons.forEach(h => result.push([h, true]));
+
+        return result;
+    };
+
+    return {
+        on(type, handler) {
+            const entry = get(type);
+            let ons = entry.ons;
+            ons.add(handler);
+            return () => {
+                ons.delete(handler);
+                if (!ons.size) store.delete(type);
+            };
+        },
+
+        off(type, handler) {
+            const entry = store.get(type);
+            if (entry) {
+                if (handler) {
+                    entry.ons.delete(handler);
+                    if (!entry.ons.size) store.delete(type);
+                } else {
+                    store.delete(type);
+                }
+            }
+        },
+
+        emit(type, event) {
+            //if (typeof type !== 'string') return;
+            getHandlers(type).forEach(([handler, isGlobal]) => {
+                try {
+                    isGlobal ? (handler as WildcardHandler<T>)(type, event!) : handler(event!);
+                } catch (e) {
+                    console.error('EventEmitter:', e);
+                }
+            });
+        },
+
+        clear() {
+            store.clear();
+        }
+    };
+}
+
+/** default emitter */
+export const events = mitt();
+
+
+===== src/ipfs.js =====
+
+
+//untested
+
+import * as IPFS from 'ipfs-core';
+
+let ipfs, myPeerId, peers = {}, peerConnection;
+
+const iceServers = [{ urls: 'stun:stun.l.google.com:19302' }];
+
+async function init() {
+    ipfs = await IPFS.create();
+    myPeerId = (await ipfs.id()).id;
+    await subscribe('my-webrtc-app');
+}
+
+async function subscribe(topic) {
+    ipfs.pubsub.subscribe(topic, async ({ from, data }) => {
+        if (from === myPeerId) return;
+
+        const msg = JSON.parse(data);
+        const type = msg.type;
+        if (type === 'peer_discovery' && !peers[from])
+            await connect(from, msg.sdpOffer);
+        else if (['sdp_offer', 'sdp_answer'].includes(type))
+            await (type === 'sdp_offer' ? handleOffer : handleAnswer)(from, new RTCSessionDescription(JSON.parse(msg[type.replace('_', '')])));
+        else if (type === 'ice_candidate')
+            await handleIceCandidate(from, new RTCIceCandidate(msg.candidate));
+    });
+    publish(topic, { type: 'peer_discovery' });
+}
+
+async function publish(topic, msg) {
+    await ipfs.pubsub.publish(topic, JSON.stringify(msg));
+}
+
+async function connect(peerId, offer) {
+    peerConnection = new RTCPeerConnection({ iceServers });
+    addIceCandidateHandler(peerId);
+
+    if (!offer) {
+        offer = await peerConnection.createOffer();
+        await peerConnection.setLocalDescription(offer);
+        await publish('my-webrtc-app', { type: 'sdp_offer', offer: JSON.stringify(offer), to: peerId });
+    } else {
+        await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+        const answer = await peerConnection.createAnswer();
+        await peerConnection.setLocalDescription(answer);
+        await publish('my-webrtc-app', { type: 'sdp_answer', answer: JSON.stringify(answer), to: peerId });
+    }
+
+    peers[peerId] = peerConnection; // Store connection
+}
+
+
+async function handleOffer(peerId, offer) {
+    peerConnection = new RTCPeerConnection({iceServers});
+    addIceCandidateHandler(peerId);
+    await peerConnection.setRemoteDescription(offer);
+    const answer = await peerConnection.createAnswer();
+    await peerConnection.setLocalDescription(answer);
+    await publish('my-webrtc-app', {type: 'sdp_answer', answer: JSON.stringify(answer), to: peerId});
+    peers[peerId] = peerConnection;
+}
+
+async function handleAnswer(peerId, answer){
+    await peers[peerId].setRemoteDescription(answer);
+}
+
+async function handleIceCandidate(peerId, candidate){
+    await peers[peerId].addIceCandidate(candidate);
+}
+
+function addIceCandidateHandler(peerId) {
+    peerConnection.onicecandidate = (event) => {
+        if (event.candidate) publish('my-webrtc-app', {type: 'ice_candidate', candidate: event.candidate, to: peerId});
+    };
+}
+
+
+===== src/match.js =====
+
+import {events} from './events';
+
+export default class Matching {
+
+    constructor(db, net) {
+        this.db = db;
+        this.net = net;
+        this.processingQueue = new Map(); // pageId -> processing state
+        this.workerCapacity = 0.5; // 0-1 scale of how much processing to take on
+        this.lastProcessed = new Map(); // pageId -> timestamp
+        this.processInterval = 5000; // Check every 5 seconds
+        this.metrics = {
+            pagesProcessed: 0,
+            matchesFound: 0,
+            processingTime: 0,
+            lastUpdate: Date.now()
+        };
+
+        // Start processing loop
+        //setInterval(() => this.processLoop(), this.processInterval);
+
+        // Listen for new/changed pages
+        //this.db.index.observe(() => this.onPagesChanged());
+
+        // Network coordination
+        //this.net.awareness().on('change', () => this.coordinated());
+    }
+
+    on(event, listener) {
+        //TODO
+    }
+
+    // Main processing loop
+    async processLoop() {
+        if (!this.shouldProcess()) return;
+
+        const pageToProcess = this.selectNextPage();
+        if (!pageToProcess) return;
+
+        await this.processPage(pageToProcess);
+        this.updateMetrics();
+    }
+
+    // Select next page to process based on age and processing history
+    selectNextPage() {
+        let oldest = null;
+        let oldestTime = Infinity;
+
+        for (const [pageId, page] of this.db.index.entries()) {
+            const lastTime = this.lastProcessed.get(pageId) || 0;
+            if (lastTime < oldestTime && !this.processingQueue.has(pageId)) {
+                oldest = pageId;
+                oldestTime = lastTime;
+            }
+        }
+
+        return oldest;
+    }
+
+    // Process a single page
+    async processPage(pageId) {
+        const startTime = Date.now();
+        this.processingQueue.set(pageId, { startTime });
+
+        try {
+            const page = this.db.page(pageId);
+            const content = this.db.pageContent(pageId).toString();
+
+            // Extract semantic properties (simplified example)
+            const properties = this.extractProperties(content);
+
+            // Find matches across other pages
+            const matches = await this.findMatches(pageId, properties);
+
+            // Store results
+            this.storeResults(pageId, properties, matches);
+
+            this.metrics.pagesProcessed++;
+            this.metrics.matchesFound += matches.length;
+
+        } catch (error) {
+            console.error('Processing error:', error);
+        } finally {
+            this.processingQueue.delete(pageId);
+            this.lastProcessed.set(pageId, Date.now());
+        }
+    }
+
+    // Extract semantic properties from content
+    extractProperties(content) {
+        // Simplified example - in reality would use more sophisticated NLP
+        const topics = new Set(content.toLowerCase()
+            .split(/[^a-z]+/)
+            .filter(w => w.length > 4));
+
+        return {
+            topics: Array.from(topics),
+            length: content.length,
+            complexity: content.split(/[.!?]+/).length,
+            timestamp: Date.now()
+        };
+    }
+
+    // Find matching pages
+    async findMatches(pageId, properties) {
+        const matches = [];
+
+        for (const [otherId, otherPage] of this.db.index.entries()) {
+            if (otherId === pageId) continue;
+
+            const otherContent = this.db.pageContent(otherId).toString();
+            const otherProps = this.extractProperties(otherContent);
+
+            // Calculate similarity
+            const similarity = this.calculateSimilarity(properties, otherProps);
+
+            if (similarity > 0.5) {
+                matches.push({
+                    pageId: otherId,
+                    similarity,
+                    timestamp: Date.now()
+                });
+            }
+        }
+
+        return matches;
+    }
+
+    // Calculate similarity between pages
+    calculateSimilarity(propsA, propsB) {
+        const commonTopics = propsA.topics.filter(t =>
+            propsB.topics.includes(t)).length;
+
+        return commonTopics /
+            Math.max(propsA.topics.length, propsB.topics.length);
+    }
+
+    // Store processing results
+    storeResults(pageId, properties, matches) {
+        const page = this.db.page(pageId);
+        if (!page) return;
+
+        // this.db.pageSet(pageId, {
+        //     ...page,
+        //     properties,
+        //     matches,
+        //     lastProcessed: Date.now()
+        // });
+    }
+
+    // Coordinate processing with other nodes
+    coordinated() {
+        if (!this.autoAdjustCapacity) return;
+        const peers = Array.from(this.net.awareness().getStates().keys());
+        const myPosition = peers.indexOf(this.net.awareness().clientID);
+
+        if (myPosition === -1) return;
+
+        // Adjust work capacity based on position in peer list
+        this.workerCapacity = 1 / (peers.length || 1);
+    }
+
+    // Determine if this server should process now
+    shouldProcess() {
+        return Math.random() < this.workerCapacity;
+    }
+
+    // Update metrics
+    updateMetrics() {
+        this.metrics.lastUpdate = Date.now();
+        this.metrics.processingTime += this.processInterval;
+
+        // Emit metrics for dashboard
+        events.emit('matching-metrics', {
+            detail: {
+                ...this.metrics,
+                queueSize: this.processingQueue.size,
+                workerCapacity: this.workerCapacity,
+                peersCount: this.net.awareness().getStates().size
+            }
+        });
+    }
+
+    getMetrics() {
+        return {
+            ...this.metrics,
+            queueSize: this.processingQueue.size,
+            workerCapacity: this.workerCapacity,
+            peersCount: this.net.awareness().getStates().size
+        };
+    }
+
+
+    startProcessing() {
+        if (this.processTimer) return;
+
+        this.processTimer = setInterval(() => this.processLoop(), this.processInterval);
+        console.log('Processing started');
+    }
+
+    stopProcessing() {
+        if (this.processTimer) {
+            clearInterval(this.processTimer);
+            this.processTimer = null;
+            console.log('Processing stopped');
+        }
+    }
+
+    setWorkerCapacity(capacity) {
+        this.workerCapacity = Math.max(0, Math.min(1, capacity));
+        console.log(`Worker capacity set to ${(this.workerCapacity * 100).toFixed(1)}%`);
+    }
+
+    setProcessInterval(ms) {
+        this.processInterval = Math.max(1000, Math.min(60000, ms));
+        if (this.processTimer) {
+            this.stopProcessing();
+            this.startProcessing();
+        }
+        console.log(`Process interval set to ${this.processInterval}ms`);
+    }
+
+    setSimilarityThreshold(threshold) {
+        this.similarityThreshold = Math.max(0, Math.min(1, threshold));
+        console.log(`Similarity threshold set to ${(this.similarityThreshold * 100).toFixed(1)}%`);
+    }
+
+    setAutoAdjust(enabled) {
+        this.autoAdjustCapacity = enabled;
+        if (enabled)
+            this.coordinated(); // Immediately adjust based on peers
+
+        console.log(`Auto-adjust capacity ${enabled ? 'enabled' : 'disabled'}`);
+    }
+
+
+
+    onPagesChanged() {
+        //TODO
+    }
+}
+
+
+
+===== src/net.ts =====
+
+import {WebrtcProvider} from 'y-webrtc';
+import DB from "./db";
+import {events} from './events';
+
+class Network {
+
+    readonly channel: string;
+    private db: DB;
+    private docsShared: Set<string>;
+    private readonly metrics: {
+        bytesTransferred: number;
+        messagesSent: number;
+        messagesReceived: number;
+        peersConnected: Set<any>
+    };
+    private net: WebrtcProvider;
+    private readonly signalingServers: string[];
+
+    constructor(channel:string, db:DB) {
+        this.channel = channel;
+        this.db = db;
+
+        this.docsShared = new Set();
+        this.metrics = {
+            messagesSent: 0,
+            messagesReceived: 0,
+            bytesTransferred: 0,
+            peersConnected: new Set(),
+        };
+
+        this.db.doc.on('update', (update, origin) => {
+            this.metrics.bytesTransferred += update.length;
+            if (origin === this.net) {
+                this.metrics.messagesSent++;
+                this.emit('message-sent', { bytes: update.length });
+            } else {
+                this.metrics.messagesReceived++;
+                this.emit('message-received', { bytes: update.length });
+            }
+        });
+
+        //TODO load persisted signaling servers
+        this.signalingServers = ['ws://localhost:4444']; // Default server
+
+        this.reset();
+    }
+
+    reset() {
+        if (this.net)
+            this.net.destroy();
+
+        /** https://github.com/yjs/y-webrtc
+         *  https://github.com/feross/simple-peer#peer--new-peeropts */
+        this.net = new WebrtcProvider(this.channel, this.db.doc, {
+            signaling: this.signalingServers,
+        });
+        this.net.awareness.setLocalStateField('user', {
+            id: this.db.userID,
+            name: 'Anonymous',
+            color: '#' + Math.floor(Math.random() * 16777215).toString(16),
+        });
+        // Track peer connections
+        this.net.on('peers', ({added, removed}) => {
+            added.forEach(id => {
+                this.metrics.peersConnected.add(id);
+                this.emit('peer-connected', {peerId: id});
+            });
+            removed.forEach(id => {
+                this.metrics.peersConnected.delete(id);
+                this.emit('peer-disconnected', {peerId: id});
+            });
+        });
+
+        this.net.awareness.on('change', changes => this.emit('awareness-update', {changes}));
+    }
+
+    addBootstrap(url:string) {
+        if (!this.signalingServers.includes(url)) {
+            this.signalingServers.push(url);
+            this.reset(); // Reinitialize with the new list
+        }
+    }
+
+    removeBootstrap(url:string) {
+        const index = this.signalingServers.indexOf(url);
+        if (index !== -1) {
+            this.signalingServers.splice(index, 1);
+            this.reset(); // Reinitialize with the updated list
+        } else
+            throw "Bootstrap not found";
+    }
+
+    user() { return this.awareness().getLocalState().user; }
+    awareness() { return this.net.awareness; }
+
+    shareDocument(pageId: string) {
+        if (!this.docsShared.has(pageId)) {
+            const page = this.db.get(pageId);
+            if (page && page.public) {
+                // Assuming that sharing a document involves ensuring its content is synced
+                // Since Yjs syncs all shared content in the document, no action is needed here
+                // However, if you have separate Y.Docs per page, initialize and connect them here
+                this.docsShared.add(pageId);
+                console.log(`Document ${pageId} is now shared.`);
+                this.emit('document-shared', { pageId });
+            } else
+                console.warn(`Cannot share document ${pageId} as it is not public.`);
+        }
+    }
+
+    unshareDocument(pageId:string) {
+        if (this.docsShared.has(pageId)) {
+            // Assuming that unsharing involves removing its content from synchronization
+            // Since Yjs syncs all shared content in the document, you might need to remove or isolate it
+            // If using separate Y.Docs per page, disconnect the provider here
+            this.docsShared.delete(pageId);
+            console.log(`Document ${pageId} is now unshared.`);
+            this.emit('document-unshared', { pageId });
+        }
+    }
+
+    getNetworkStats() {
+        return {
+            ...this.metrics,
+            peersConnected: Array.from(this.metrics.peersConnected),
+            connectedPeersCount: this.metrics.peersConnected.size,
+            awareness: Array.from(this.net.awareness.getStates().entries()).map(
+                ([clientId, state]) => ({
+                    clientId,
+                    metadata: state.user,
+                    lastActive: Date.now(), // Placeholder for actual last active timestamp
+                })
+            ),
+        };
+    }
+
+    emit(type, data) {
+        events.emit('networkActivity', {
+            detail: {
+                type,
+                timestamp: Date.now(),
+                data: {
+                    ...data,
+                    stats: this.getNetworkStats(),
+                }
+            }
+        });
+    }
+}
+
+export default Network;
+
+
+===== src/obj.ts =====
+
+import * as Y from "yjs";
+
+type Observer = (events: Y.YEvent<any>[]) => void;
+
+export default class NObject {
+    private readonly root: Y.Map<any>;
+
+    constructor(private doc: Y.Doc, public id:string) {
+        this.id = id;
+        this.root = doc.getMap(id);
+    }
+
+    public init(author:string): void {
+        const now = Date.now();
+        this.doc.transact(() => {
+            this.root.set('content', new Y.Text());
+
+            const links = new Y.Map();
+            links.set('reply', new Y.Array());
+            links.set('replyTo', new Y.Array());
+            this.root.set('links', links);
+
+            const meta = new Y.Map();
+            meta.set('id', this.id);
+            meta.set('name', '?');
+            meta.set('created', now);
+            meta.set('updated', now);
+            meta.set('public', false);
+            meta.set('author', author);
+            meta.set('tags', new Y.Array());
+            this.root.set('metadata', meta);
+        });
+    }
+
+    // Transactional property access
+    private transact<T>(fn: () => T): T {
+        return this.doc.transact(() => {
+            const result = fn();
+            this.root.get('metadata').set('updated', Date.now());
+            return result;
+        });
+    }
+
+    get created():number { return this.root.get('metadata').get('created'); }
+    get updated():number { return this.root.get('metadata').get('updated'); }
+
+    get name():string { return this.root.get('metadata').get('name'); }
+    set name(v: string) { this.transact(() => this.root.get('metadata').set('name', v)); }
+
+    get public():boolean { return this.root.get('metadata').get('public'); }
+    set public(v: boolean) { this.transact(() => this.root.get('metadata').set('public', v)); }
+
+    get author():string { return this.root.get('metadata').get('author'); }
+    set author(v: string) { this.transact(() => this.root.get('metadata').set('author', v)); }
+
+    get text():Y.Text { return this.root.get('content'); }
+    setText(newText: string | Y.Text) {
+        this.transact(() => {
+            const t = this.text;
+            t.delete(0, t.length);
+            t.insert(0, newText.toString());
+        });
+    }
+
+    // Collections with automatic transactions
+    get tags():Array<string> { return this.root.get('metadata').get('tags').toArray(); }
+    get replies():Set<string> { return new Set(this.root.get('links').get('reply')); }
+    get repliesTo():Set<string> { return new Set(this.root.get('links').get('replyTo')); }
+
+    private updateCollection(type: 'tags' | 'reply' | 'replyTo', value: string, add: boolean) {
+        this.transact(() => {
+            let arr = type === 'tags'
+                ? this.root.get('metadata').get('tags')
+                : this.root.get('links').get(type);
+
+            if (add) {
+                arr.push([value]);
+            } else if (!add) {
+                const idx = arr.indexOf(value);
+                if (idx !== -1) arr.delete(idx, 1);
+            }
+        });
+    }
+
+    // Collection operations
+    addTag = (tag: string) => this.updateCollection('tags', tag, true);
+    removeTag = (tag: string) => this.updateCollection('tags', tag, false);
+    addReply = (id: string) => this.updateCollection('reply', id, true);
+    removeReply = (id: string) => this.updateCollection('reply', id, false);
+    addReplyTo = (id: string) => this.updateCollection('replyTo', id, true);
+    removeReplyTo = (id: string) => this.updateCollection('replyTo', id, false);
+
+    toJSON(): any {
+        return {
+            metadata: {
+                id: this.id,
+                name: this.name,
+                created: this.created,
+                updated: this.updated,
+                public: this.public,
+                author: this.author,
+                tags: this.tags
+            },
+            text: this.text.toString(),
+            links: {
+                reply: this.replies,
+                replyTo: this.repliesTo
+            }
+        };
+    }
+
+    observe(fn: Observer) {
+        this.root.observeDeep(fn);
+    }
+
+    unobserve(fn: Observer) {
+        this.root.unobserveDeep(fn);
+    }
+}
+
+===== src/util.ts =====
+
+export function debounce<T extends (...args: any[]) => any>(callback: T, delay: number): (...args: Parameters<T>) => void {
+    let timeout: NodeJS.Timeout | null = null;
+    return (...args: Parameters<T>): void => {
+        if (timeout) clearTimeout(timeout);
+        timeout = setTimeout(() => callback.apply(this, args), delay);
+    };
+}
+
+
+===== test/db.test.js =====
+
+import {afterEach, beforeAll, beforeEach, describe, expect, test} from 'vitest';
+import DB from '../src/db';
+import {v4 as uuid} from "uuid";
+import {IndexeddbPersistence} from 'y-indexeddb';
+
+// Mock IndexeddbPersistence to avoid actual database interactions during tests
+vi.mock('y-indexeddb', () => ({
+    IndexeddbPersistence: vi.fn().mockImplementation(() => ({
+        on: vi.fn(),
+        clear: vi.fn(), // Add clear method for cleanup
+        load: vi.fn().mockResolvedValue({}), // Mock load method
+        persist: vi.fn().mockResolvedValue(true), // Mock persist method
+    })),
+}));
+
+describe('DB', () => {
+    let db;
+    let mockStorage;
+
+    beforeAll(() => {
+        // Ensure the mock is reset before each test suite
+        vi.clearAllMocks();
+    });
+
+    beforeEach(async () => {
+        db = new DB('test-user');
+        // Access the mock instance directly without type assertion
+        mockStorage = (db.storage);
+        // Clear the mock database before each test
+        await mockStorage.clear(); // Added await here to ensure clear completes before proceeding
+    });
+
+    test('creates new object with correct structure', async () => {
+        const obj = await db.create();
+        expect(obj).toBeDefined();
+        expect(obj.id).toBeDefined();
+        expect(obj.name).toBe('?');
+        expect(obj.public).toBe(false);
+        expect(obj.author).toBe('test-user');
+        expect(obj.created).toBeDefined();
+        expect(obj.updated).toBeDefined();
+        expect(obj.tags).toEqual([]);
+        expect(obj.text.toString()).toBe('');
+        expect(obj.replies).toEqual(new Set());
+        expect(obj.repliesTo).toEqual(new Set());
+    });
+
+    test('gets existing object', async () => {
+        const obj1 = await db.create();
+        const obj2 = await db.get(obj1.id);
+        expect(obj2).toBeDefined();
+        expect(obj1.id).toBe(obj2?.id);
+    });
+
+    test('gets non-existing object', async () => {
+        const obj = await db.get(uuid());
+        expect(obj).toBeNull();
+    });
+
+    test('updates object title', async () => {
+        const obj = await db.create();
+        const newTitle = 'New Title';
+        obj.name = newTitle;
+        expect(obj.name).toBe(newTitle);
+    });
+
+    test('delete object', async () => {
+        const obj = await db.create();
+        expect(await db.delete(obj.id)).toBe(true);
+        expect(await db.get(obj.id)).toBeNull();
+    });
+
+    test('delete object - handles non-existent object', async () => {
+        const nonExistentId = uuid();
+        await expect(db.delete(nonExistentId)).resolves.toBe(false);
+    });
+
+    test('createReply', async () => {
+        const parent = await db.create();
+        const reply = await db.createReply(parent.id, 'Reply Title');
+        expect(reply).toBeDefined();
+        expect(reply?.name).toBe('Reply Title');
+        expect(parent.replies.has(reply?.id)).toBe(true);
+        expect(reply?.repliesTo.has(parent.id)).toBe(true);
+    });
+
+    test('createReply - handles non-existent parent', async () => {
+        const nonExistentParentId = uuid();
+        await expect(db.createReply(nonExistentParentId)).resolves.toBeNull();
+    });
+
+    test('Database error handling - create', async () => {
+        mockStorage.persist.mockRejectedValueOnce(new Error('Database error'));
+        await expect(db.create()).rejects.toThrow('Database error');
+    });
+
+    test('Database error handling - get', async () => {
+        mockStorage.load.mockRejectedValueOnce(new Error('Database error'));
+        await expect(db.get(uuid())).rejects.toThrow('Database error');
+    });
+
+    test('Database error handling - delete', async () => {
+        const obj = await db.create();
+        mockStorage.persist.mockRejectedValueOnce(new Error('Database error'));
+        await expect(db.delete(obj.id)).rejects.toThrow('Database error');
+    });
+
+
+    // Add more tests for error handling in other methods (get, delete, etc.)
+});
+
+
+===== test/events.test.ts =====
+
+import {beforeEach, describe, expect, it, vi} from 'vitest';
+import {mitt as Emitter} from '../src/events';
+
+interface TestEvents {
+    foo: string;
+    bar: number;
+    'network:error': Error;
+    'network:success': { status: number };
+    'auth:login': { user: string };
+    'auth:logout': void;
+}
+
+describe('mitt', () => {
+    let e: ReturnType<typeof Emitter<TestEvents>>;
+    let spy: ReturnType<typeof vi.fn>;
+
+    beforeEach(() => {
+        e = Emitter<TestEvents>();
+        spy = vi.fn();
+    });
+
+    describe('basic functionality', () => {
+        it('should handle basic event subscription and emission', () => {
+            e.on('foo', spy);
+            e.emit('foo', 'test');
+            expect(spy).toHaveBeenCalledWith('test');
+            expect(spy).toHaveBeenCalledTimes(1);
+        });
+
+        it('should handle multiple handlers for same event', () => {
+            const spy2 = vi.fn();
+            e.on('foo', spy);
+            e.on('foo', spy2);
+            e.emit('foo', 'test');
+            expect(spy).toHaveBeenCalledWith('test');
+            expect(spy2).toHaveBeenCalledWith('test');
+            expect(spy).toHaveBeenCalledTimes(1);
+            expect(spy2).toHaveBeenCalledTimes(1);
+        });
+
+        it('should not call handlers after off()', () => {
+            e.on('foo', spy);
+            e.off('foo', spy);
+            e.emit('foo', 'test');
+            expect(spy).not.toHaveBeenCalled();
+        });
+
+        it('should support cleanup function from on()', () => {
+            const off = e.on('foo', spy);
+            e.emit('foo', 'test1');
+            off();
+            e.emit('foo', 'test2');
+            expect(spy).toHaveBeenCalledTimes(1);
+            expect(spy).toHaveBeenCalledWith('test1');
+        });
+    });
+
+    describe('wildcard handlers', () => {
+        it('should handle global wildcard *', () => {
+            const wildcardSpy = vi.fn();
+            e.on('*', wildcardSpy);
+            e.emit('foo', 'test');
+            e.emit('bar', 42);
+            expect(wildcardSpy).toHaveBeenCalledTimes(2);
+            expect(wildcardSpy).toHaveBeenNthCalledWith(1, 'foo', 'test');
+            expect(wildcardSpy).toHaveBeenNthCalledWith(2, 'bar', 42);
+        });
+
+        it('should handle pattern matching with prefix wildcards', () => {
+            const networkSpy = vi.fn();
+            const authSpy = vi.fn();
+            const globalSpy = vi.fn();
+
+            e.on('network:*', networkSpy);
+            e.on('auth:*', authSpy);
+            e.on('*', globalSpy);
+
+            const error = new Error('Failed');
+            e.emit('network:error', error);
+            e.emit('auth:login', { user: 'test' });
+
+            expect(networkSpy).toHaveBeenCalledWith('network:error', error);
+            expect(networkSpy).toHaveBeenCalledTimes(1);
+            expect(authSpy).toHaveBeenCalledWith('auth:login', { user: 'test' });
+            expect(authSpy).toHaveBeenCalledTimes(1);
+            expect(globalSpy).toHaveBeenCalledTimes(2);
+        });
+    });
+
+    describe('error handling', () => {
+        it('should handle errors in event handlers', () => {
+            const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+            const error = new Error('Handler error');
+
+            e.on('foo', () => { throw error; });
+            e.emit('foo', 'test');
+
+            expect(consoleError).toHaveBeenCalledWith('EventEmitter:', error);
+            consoleError.mockRestore();
+        });
+        it('should not duplicate handler calls', () => {
+            const spy1 = vi.fn();
+            const spy2 = vi.fn();
+
+            e.on('network:*', spy1);
+            e.on('*', spy2);
+
+            e.emit('network:error', new Error('test'));
+
+            expect(spy1).toHaveBeenCalledTimes(1);
+            expect(spy2).toHaveBeenCalledTimes(1);
+        });
+        it('should continue executing handlers after error', () => {
+            e.on('foo', () => { throw 'First handler error'; });
+            e.on('foo', spy);
+
+            e.emit('foo', 'test');
+            expect(spy).toHaveBeenCalledWith('test');
+        });
+    });
+
+    describe('memory management', () => {
+        it('should clean up empty handler sets', async () => {
+            const off1 = e.on('foo', spy);
+            const off2 = e.on('foo', () => {});
+
+            off1();
+            off2();
+
+            e.emit('foo', 'test');
+            expect(spy).not.toHaveBeenCalled();
+        });
+
+        it('should handle clear() properly', () => {
+            e.on('foo', spy);
+            e.on('bar', spy);
+            e.clear();
+
+            e.emit('foo', 'test');
+            e.emit('bar', 42);
+
+            expect(spy).not.toHaveBeenCalled();
+        });
+    });
+
+    describe('edge cases', () => {
+        it('should handle off() with non-existent handler', () => {
+            e.off('foo', spy);
+            e.emit('foo', 'test');
+            expect(spy).not.toHaveBeenCalled();
+        });
+
+        it('should handle off() with non-existent event type', () => {
+            e.off('foo');
+            e.emit('foo', 'test');
+            expect(spy).not.toHaveBeenCalled();
+        });
+
+        it('should handle emit() with no handlers', () => {
+            e.emit('foo', 'test');
+            expect(spy).not.toHaveBeenCalled();
+        });
+
+        it('should handle rapid on/off/emit cycles', () => {
+            for (let i = 0; i < 100; i++) {
+                const off = e.on('foo', spy);
+                e.emit('foo', 'test');
+                off();
+            }
+            expect(spy).toHaveBeenCalledTimes(100);
+        });
+    });
+
+    describe('type safety', () => {
+        it('should enforce correct event types', () => {
+            e.on('foo', (s: string) => s.toLowerCase());
+            e.on('bar', (n: number) => n.toFixed());
+            e.on('network:error', (e: Error) => e.message);
+        });
+
+        it('should allow void events', () => {
+            e.on('auth:logout', () => {});
+            e.emit('auth:logout');
+        });
+    });
+});
+
+===== test/p2p.test.ts =====
+
+import { describe, it, expect } from 'vitest';
+import P2PNode from '../server/p2p';
+import { createFromJSON } from '@libp2p/peer-id-factory';
+import { PeerId } from '@libp2p/interface-peer-id';
+
+describe('P2PNode', () => {
+    it('should discover each other', async () => {
+        const peerId1 = await createFromJSON(require('./peer-id1.json'));
+        const peerId2 = await createFromJSON(require('./peer-id2.json'));
+
+        const node1 = new P2PNode({ peerId: peerId1, bootstrapList: [
+                '/ip4/127.0.0.1/tcp/0/ws/p2p/' + peerId2.toString()
+            ] });
+        const node2 = new P2PNode({ peerId: peerId2 });
+        let node2Multiaddr: string | undefined;
+
+        await node1.start();
+        await node2.start();
+
+        node1.on('peer:connect', (connection) => {
+            console.log('Node1 connected to:', connection.remotePeer.toString());
+        });
+
+        node2.on('peer:connect', () => {
+            node2Multiaddr = node2.getMultiaddrs()[0].toString() + '/p2p/' + peerId2.toString();
+            console.log("node2Multiaddr", node2Multiaddr);
+        });
+
+        // Adding a delay to ensure nodes have time to discover each other
+        await new Promise(resolve => setTimeout(resolve, 5000));
+
+        const node1Peers = await node1.getPeers();
+        const node2Peers = await node2.getPeers();
+
+        console.log('Node1 peers:', node1Peers);
+        console.log('Node2 peers:', node2Peers);
+
+        expect(node1Peers.find(p => p.toString() === peerId2.toString())).toBeDefined();
+        expect(node2Peers.find(p => p.toString() === peerId1.toString())).toBeDefined();
+
+        await node1.stop();
+        await node2.stop();
+    });
+});
+
+
+===== test/setup.js =====
+
+import {afterEach, beforeAll, vi} from 'vitest';
+import $ from 'jquery';
+
+vi.mock('y-webrtc', () => ({
+    WebrtcProvider: vi.fn().mockImplementation(() => ({
+        awareness: {
+            setLocalStateField: vi.fn(),
+            on: vi.fn(),
+            getLocalState: () => ({ user: { id: 'test-user', name: 'Test User' } }),
+            getStates: () => new Map(),
+        },
+        on: vi.fn(),
+        destroy: vi.fn(),
+    })),
+}));
+
+vi.mock('y-indexeddb', () => ({
+    IndexeddbPersistence: vi.fn().mockImplementation(() => ({
+        on: vi.fn(),
+    })),
+}));
+
+// Setup global mocks and stubs
+beforeAll(() => {
+    // Mock localStorage
+    global.localStorage = {
+        getItem: vi.fn(),
+        setItem: vi.fn(),
+        clear: vi.fn(),
+    };
+
+    // Mock WebRTC connections
+    global.RTCPeerConnection = vi.fn();
+    global.RTCSessionDescription = vi.fn();
+
+    // Add jQuery to global scope as some components expect it
+    global.$ = $;
+});
+
+// Clean up after each test
+afterEach(() => vi.clearAllMocks());
+
+===== tsconfig.json =====
+
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "lib": ["ESNext", "dom"],
+    "types": ["node"],
+    "strict": true,
+    "allowJs": true,
+    "inlineSources": true,
+    "inlineSourceMap": true,
+    "moduleResolution": "bundler"
+  },
+  "include": ["**/*.ts","**/*.js"]
+}
+
+===== ui/app.ts =====
+
+import $ from 'jquery';
+import DB from '../src/db';
+import Network from '../src/net';
+import SideBar from './sidebar';
+import Editor from "./editor";
+import Matching from "../src/match.js";
+import { io } from "socket.io-client";
+
+import '/ui/css/app.css';
+import {IndexeddbPersistence} from "y-indexeddb";
+
+export default class App {
+    private readonly channel: string;
+
+    readonly db: DB;
+    readonly net: Network;
+    readonly match: Matching;
+    readonly editor: Editor;
+    private socket: any; // Socket.IO client
+
+    public ele: JQuery;
+
+    constructor(userID:string, channel:string) {
+        this.channel = channel;
+
+        this.db = new DB(userID);
+        this.net = new Network(this.channel, this.db);
+
+        this.match = new Matching(this.db, this.net);
+
+        this.ele = $('<div>').addClass('container');
+
+        const mainView = $('<div class="main-view"></div>');
+        this.ele.append(mainView);
+
+        this.editor = new Editor(mainView, this.db, this.awareness.bind(this), this);
+
+        this.ele.prepend(new SideBar(this).ele); //HACK add last
+
+        // Socket.IO connection
+        this.socket = io();
+        this.socket.on('connect', () => {
+            console.log('Connected to server');
+        });
+        this.socket.on('snapshot', (snap) => {
+            console.log('Received snapshot:', snap);
+            // Process snapshot data (e.g., display it)
+        });
+        this.socket.on('plugin-status', (plugins) => {
+            console.log('Plugin status:', plugins);
+            // Update UI to reflect plugin status
+        });
+        this.socket.on('plugin-error', (pluginName, error) => {
+            console.error(`Plugin ${pluginName} error:`, error);
+            // Display error message to the user
+        });
+    }
+
+    user() { return this.net.user(); }
+    awareness() { return this.net.awareness(); }
+}
+
+
+===== ui/css/app.css =====
+
+body {
+    position: fixed;
+
+    min-width: 320px;
+    min-height: 100vh;
+
+    max-width: 100%;
+    max-height: 100%;
+
+    width: 100%;
+
+    margin: 0;
+
+    font-family: sans-serif;
+
+    font-synthesis: none;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+h1,h2,h3 {
+    margin: 0;
+}
+
+.container {
+    display: flex;
+    height: 100vh;
+}
+
+.main-view {
+    flex: 1;
+    padding: 10px;
+    display: flex;
+    max-height: 100%;
+    overflow: auto;
+    flex-direction: column;
+}
+
+
+ul { list-style: none; padding: 0; margin: 0; }
+li { padding: 8px; cursor: pointer; border-bottom: 1px solid #eee; }
+li:hover { background: #f5f5f5; }
+
+
+.toggle-switch {
+    position: relative;
+    display: inline-block;
+    width: 60px;
+    height: 34px;
+    margin-left: 10px;
+}
+.toggle-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+.slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: #ccc;
+    transition: 0.4s;
+    border-radius: 34px;
+}
+.slider:before {
+    position: absolute;
+    content: "";
+    height: 26px;
+    width: 26px;
+    left: 4px;
+    bottom: 4px;
+    background-color: white;
+    transition: 0.4s;
+    border-radius: 50%;
+}
+input:checked + .slider { background-color: #2196F3; }
+input:checked + .slider:before { transform: translateX(26px); }
+.profile-field, .friends-list-field { margin-bottom: 10px; }
+
+
+
+
+===== ui/css/dark-mode.css =====
+
+/* Dark Mode */
+:root {
+    --background-color: #1e293b;
+    --text-color: #e5e7eb;
+    --primary-color: #89c9b8;
+    --hover-color: #74b5a2;
+    --border-color: #3b4355;
+    --input-bg: #2c3e50;
+    --button-text: #ffffff;
+    --table-header-bg: #34495e;
+}
+
+/* General Body Styling */
+body {
+    font-family: 'Arial', sans-serif;
+    background-color: var(--background-color);
+    color: var(--text-color);
+    margin: 5px;
+    padding: 5px;
+}
+
+/* Inputs */
+input[type="text"], input[type="password"], input[type="search"], input[type="email"], textarea {
+    width: 300px;
+    padding: 10px;
+    border: 1px solid var(--border-color);
+    border-radius: 5px;
+    background-color: var(--input-bg);
+    font-size: 16px;
+    color: var(--text-color);
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+input:focus, textarea:focus {
+    border-color: var(--primary-color);
+    outline: none;
+}
+
+/* Buttons */
+button {
+    background-color: var(--primary-color);
+    color: var(--button-text);
+    padding: 10px 20px;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 16px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+button:hover {
+    background-color: var(--hover-color);
+}
+
+/* Select Dropdown */
+select {
+    width: 300px;
+    padding: 10px;
+    border: 1px solid var(--border-color);
+    border-radius: 5px;
+    background-color: var(--input-bg);
+    color: var(--text-color);
+}
+
+/* Other Elements */
+input[type="checkbox"], input[type="radio"], input[type="range"], progress, input[type="file"] {
+    background-color: var(--input-bg);
+    border-color: var(--border-color);
+    color: var(--text-color);
+}
+/* Table */
+table {
+    width: 100%;
+    border-collapse: collapse;
+    background-color: var(--input-bg);
+}
+th, td {
+    border: 1px solid var(--border-color);
+    padding: 8px;
+    color: var(--text-color);
+}
+th {
+    background-color: var(--table-header-bg);
+}
+
+/* Modal */
+.modal {
+    display:none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 90%;
+    height: 90%;
+    padding:5px;
+    margin:5px;
+    background: rgba(51, 71, 91, 0.5);
+    justify-content: center;
+    align-items: center;
+}
+.modal-content {
+    background: var(--input-bg);
+    padding: 20px;
+    border-radius: 10px;
+    color: var(--text-color);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+}
+
+===== ui/css/db.css =====
+
+.database-page .db-controls {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.database-page #filter-input {
+    flex: 1;
+    padding: 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+}
+
+.database-page #sort-select,
+.database-page #sort-button {
+    padding: 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.database-wrapper {
+    max-height: 100%;
+    overflow: auto;
+}
+
+.database-wrapper tr:nth-child(even){
+    background-color: rgba(122,94,255,0.72);
+}
+.database-wrapper tr:nth-child(odd){
+    background-color: rgba(122,180,255,0.72);
+}
+.database-page .database-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.database-page .database-table th,
+.database-page .database-table td {
+    border: 1px solid #ddd;
+    padding: 8px;
+}
+
+.database-page .database-table th {
+    background-color: #f2f2f2;
+    cursor: pointer;
+}
+
+.database-page .database-table tr:hover {
+    background-color: rgba(225,255,205,0.72);
+}
+
+
+===== ui/css/editor.css =====
+
+.editor-controls {
+    padding: 12px;
+    border-bottom: 1px solid #ddd;
+    background: #f8f9fa;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+.title-input {
+    padding: 8px;
+    font-size: 16px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    margin-right: 12px;
+}
+.privacy-toggle {
+    align-items: center;
+    gap: 8px;
+}
+.template-buttons {
+    display: flex;
+    gap: 8px;
+}
+.template-button {
+    padding: 8px 12px;
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 16px;
+    transition: background-color 0.2s;
+}
+.template-button:hover {
+    background: #f0f0f0;
+}
+.toggle-switch {
+    position: relative;
+    display: inline-block;
+    width: 48px;
+    height: 24px;
+}
+.toggle-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+.toggle-slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: #ccc;
+    transition: 0.4s;
+    border-radius: 24px;
+}
+.toggle-slider:before {
+    position: absolute;
+    content: "";
+    height: 18px;
+    width: 18px;
+    left: 3px;
+    bottom: 3px;
+    background-color: white;
+    transition: 0.4s;
+    border-radius: 50%;
+}
+input:checked + .toggle-slider {
+    background-color: #2196F3;
+}
+input:checked + .toggle-slider:before {
+    transform: translateX(24px);
+}
+.toolbar {
+    display: flex;
+    gap: 8px;
+    padding: 8px;
+    background: #f1f1f1;
+    border-bottom: 1px solid #ccc;
+}
+.toolbar button {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 8px;
+    font-size: 16px;
+    border-radius: 4px;
+    transition: background-color 0.2s;
+}
+.toolbar button:hover {
+    background-color: #e0e0e0;
+}
+.editor {
+    flex: 1;
+    padding: 16px;
+    outline: none;
+    overflow-y: auto;
+    min-height: 300px;
+}
+
+
+===== ui/css/frens.css =====
+
+.Friends-list-page {
+color: rgba(84,255,182,0.72);
+
+}
+
+.Friends-list-page li:nth-child(even) {
+color: rgba(27,90,255,0.72);
+
+}
+
+.Friends-list-page li:nth-child(odd) {
+color: rgba(79,48,255,0.72);
+}
+
+===== ui/css/light-mode.css =====
+
+/* Light Mode */
+:root {
+    --background-color: #f7f9fc;
+    --text-color: #33475b;
+    --primary-color: #a3d8f4;
+    --hover-color: #82c4e6;
+    --border-color: #d1d9e6;
+    --input-bg: #ffffff;
+    --button-text: #ffffff;
+    --table-header-bg: #dceaf2;
+}
+
+/* General Body Styling */
+body {
+    font-family: 'Arial', sans-serif;
+    background-color: var(--background-color);
+    color: var(--text-color);
+    margin:5px;
+    padding: 5px;
+}
+
+/* Inputs */
+input[type="text"], input[type="password"], input[type="search"], input[type="email"], textarea {
+    width: 300px;
+    padding: 10px;
+    border: 1px solid var(--border-color);
+    border-radius: 5px;
+    background-color: var(--input-bg);
+    font-size: 16px;
+    color: var(--text-color);
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+input:focus, textarea:focus {
+    border-color: var(--primary-color);
+    outline: none;
+}
+
+/* Buttons */
+button {
+    background-color: var(--primary-color);
+    color: var(--button-text);
+    padding: 10px 20px;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 16px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+button:hover {
+    background-color: var(--hover-color);
+}
+
+/* Select Dropdown */
+select {
+    width: 300px;
+    padding: 10px;
+    border: 1px solid var(--border-color);
+    border-radius: 5px;
+    background-color: var(--input-bg);
+    color: var(--text-color);
+}
+
+/* Checkboxes and Radio Buttons */
+input[type="checkbox"], input[type="radio"] {
+    margin-right: 10px;
+}
+
+/* Range Slider */
+input[type="range"] {
+    width: 300px;
+    background-color: var(--primary-color);
+}
+
+/* File Input */
+input[type="file"] {
+    border: 1px solid var(--border-color);
+    padding: 5px;
+    border-radius: 5px;
+    background-color: var(--input-bg);
+}
+
+/* Progress Bar */
+progress {
+    width: 300px;
+    height: 20px;
+}
+
+/* Links */
+a {
+    color: var(--primary-color);
+    text-decoration: none;
+    font-size: 16px;
+}
+a:hover {
+    color: var(--hover-color);
+}
+
+/* Table */
+table {
+    width: 100%;
+    border-collapse: collapse;
+    background-color: var(--input-bg);
+}
+th, td {
+    border: 1px solid var(--border-color);
+    padding: 8px;
+    color: var(--text-color);
+}
+th {
+    background-color: var(--table-header-bg);
+}
+
+/* Modal */
+.modal {
+  display:none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 80%;
+    height: 80%;
+    padding:5px;
+    margin:5px;
+    background: rgba(51, 71, 91, 0.5);
+    justify-content: center;
+    align-items: center;
+}
+.modal-content {
+    background: var(--input-bg);
+    padding: 20px;
+    border-radius: 10px;
+    color: var(--text-color);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+}
+
+
+===== ui/css/match.css =====
+
+.matching-dashboard {
+    display: flex;
+    padding: 20px;
+    background: #fff;
+}
+
+.control-panel {
+    background: #f8f9fa;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    padding: 15px;
+    margin-bottom: 20px;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 15px;
+}
+
+.control-group {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.control-group label {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-weight: 500;
+}
+
+input:checked + .toggle-slider {
+    background-color: #2196F3;
+}
+
+input:checked + .toggle-slider:before {
+    transform: translateX(24px);
+}
+
+input[type="range"] {
+    width: 150px;
+}
+
+input[type="number"] {
+    width: 60px;
+    padding: 4px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+}
+
+.metrics-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 20px;
+    margin-bottom: 20px;
+}
+
+.metric-box {
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    padding: 15px;
+    background: #f8f9fa;
+}
+
+.metric-box h3 {
+    margin: 0 0 15px 0;
+    color: #333;
+    font-size: 16px;
+}
+
+.status-indicators {
+    display: grid;
+    gap: 10px;
+}
+
+.status-indicators div {
+    display: flex;
+    justify-content: space-between;
+    padding: 5px 0;
+    border-bottom: 1px solid #eee;
+}
+
+.match-entry {
+    padding: 10px;
+    border-bottom: 1px solid #eee;
+    font-size: 14px;
+}
+
+
+.match-details {
+    color: #666;
+    display: flex;
+    justify-content: space-between;
+}
+
+.match-time {
+    color: #999;
+    font-size: 12px;
+}
+
+.history-chart {
+    width: 100%;
+    height: 200px;
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+}
+
+
+.switch-label {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.toggle-switch {
+    position: relative;
+    display: inline-block;
+    width: 48px;
+    height: 24px;
+}
+
+.toggle-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.toggle-slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: #ccc;
+    transition: .4s;
+    border-radius: 24px;
+}
+
+.toggle-slider:before {
+    position: absolute;
+    content: "";
+    height: 18px;
+    width: 18px;
+    left: 3px;
+    bottom: 3px;
+    background-color: white;
+    transition: .4s;
+    border-radius: 50%;
+}
+
+input:checked + .toggle-slider {
+    background-color: #2196F3;
+}
+
+input:checked + .toggle-slider:before {
+    transform: translateX(24px);
+}
+
+input[type="range"] {
+    width: 150px;
+}
+
+input[type="number"] {
+    width: 60px;
+    padding: 4px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+}
+
+.metrics-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 20px;
+    margin-bottom: 20px;
+}
+
+
+.match-pages {
+    font-weight: bold;
+    margin-bottom: 5px;
+}
+
+
+===== ui/css/net.css =====
+
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1em;
+    margin-bottom: 1em;
+}
+.stat-box {
+    border: 1px solid #ccc;
+    padding: 1em;
+    border-radius: 4px;
+}
+.event-log {
+    height: 200px;
+    overflow-y: auto;
+    border: 1px solid #ccc;
+    padding: 1em;
+}
+.peer-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5em;
+    margin-top: 1em;
+}
+.peer-badge {
+    background: #e0e0e0;
+    padding: 0.5em;
+    border-radius: 4px;
+    font-size: 0.9em;
+}
+.event-entry {
+    margin: 0.5em 0;
+    padding: 0.5em;
+    border-left: 3px solid #ccc;
+}
+.peer-connected { border-left-color: #4CAF50; }
+.peer-disconnected { border-left-color: #f44336; }
+.message-sent { border-left-color: #2196F3; }
+.message-received { border-left-color: #FF9800; }
+
+
+===== ui/css/sidebar.css =====
+
+.sidebar {
+    width: 160px;
+    overflow-y: auto;
+    padding: 10px;
+    background-color: #fff;
+    border-right: 1px solid #ddd;
+}
+.menubar {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: space-around;
+
+    gap: 5px;
+    margin-bottom: 10px;
+}
+.menubar-button {
+    background-color: #007BFF;
+    color: white;
+    border: none;
+    padding: 8px 10px;
+    cursor: pointer;
+    font-size: 14px;
+    border-radius: 4px;
+    transition: background-color 0.3s;
+}
+.menubar-button:hover { background-color: #0056b3; }
+.add-page-button { background-color: #28a745; }
+.add-page-button:hover { background-color: #1e7e34; }
+.context-menu {
+    position: absolute;
+    border: 1px solid #ccc;
+    box-shadow: 2px 2px 6px rgba(30,30,30,0.2);
+    display: none;
+    z-index: 1000;
+    background-color: white;
+    border-radius: 4px;
+}
+
+
+===== ui/db.view.js =====
+
+import $ from "jquery";
+
+import '/ui/css/db.css';
+
+export default class DBView {
+    constructor(root, db) {
+        this.root = root;
+        this.db = db;
+        this.ele = $('<div>').addClass('database-page');
+        this.sortKey = 'title';
+        this.sortOrder = 'asc';
+        this.filterText = '';
+    }
+
+    render() {
+
+
+        $(this.root).find('.main-view').empty().append(this.ele);
+
+        this.ele.html(`
+            <h3>Database Statistics</h3>
+            <div class="db-controls">
+                <input type="text" class="filter-input" placeholder="Filter by title">
+                <select class="sort-select">
+                    <option value="title">Title</option>
+                    <option value="pageId">Page ID</option>
+                </select>
+                <button class="sort-button">Sort</button>
+            </div>
+            <div class="database-wrapper">
+                <table class="database-table">
+                    <thead>
+                        <tr>
+                            <th>Page ID</th>
+                            <th>Page Title</th>
+                            <th>Content (Preview)</th>
+                            <th>Public</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        `);
+
+        this.bindEvents();
+        this.updateTable();
+    }
+
+    bindEvents() {
+        this.ele.find('#filter-input').on('input', (e) => {
+            this.filterText = $(e.target).val().toLowerCase();
+            this.updateTable();
+        });
+
+        this.ele.find('#sort-select').on('change', (e) => {
+            this.sortKey = $(e.target).val();
+        });
+
+        this.ele.find('#sort-button').click(() => {
+            this.sortOrder = this.sortOrder === 'asc' ? 'desc' : 'asc';
+            this.updateTable();
+        });
+
+        this.db.index.observe(() => this.updateTable());
+    }
+
+    updateTable() {
+        const $tbody = this.ele.find('tbody').empty();
+        let pages = Array.from(this.db.index.entries()).map(([key, value]) => ({ pageId: key, ...value }));
+
+        if (this.filterText)
+            pages = pages.filter(page => page.title.toLowerCase().includes(this.filterText));
+
+        pages.sort((a, b) => {
+            if (a[this.sortKey] < b[this.sortKey]) return this.sortOrder === 'asc' ? -1 : 1;
+            if (a[this.sortKey] > b[this.sortKey]) return this.sortOrder === 'asc' ? 1 : -1;
+            return 0;
+        });
+
+        pages.forEach(page => {
+            const contentPreview = page.text.slice(0, 100);
+            const isPublic = page.p ? 'Yes' : 'No';
+            $tbody.append(`
+                <tr>
+                    <td>${page.pageId}</td>
+                    <td>${page.title}</td>
+                    <td>${contentPreview}</td>
+                    <td>${isPublic}</td>
+                </tr>
+            `);
+        });
+    }
+}
+
+
+===== ui/editor.ts =====
+
+import $ from "jquery";
+import DB from '../src/db'
+import NObject from '../src/obj'
+import App from './app'
+import {debounce} from "../src/util.js";
+import '/ui/css/editor.css';
+import {YText} from "yjs/dist/src/types/YText";
+
+export default class Editor {
+    private readonly db: DB;
+    private readonly app: App;
+    private readonly getAwareness: Function;
+    private currentObjId: string;
+    private provider: any;
+    private ele: JQuery;
+    private ytext: YText;
+    private updatePeriodMS: number;
+    private editor: JQuery;
+    private isReadOnly: boolean;
+    private currentObject:NObject;
+
+    constructor(ele:JQuery, db:DB, getAwareness:Function, app:App) {
+        this.db = db;
+        this.app = app;
+        this.getAwareness = getAwareness;
+        this.currentObjId = '';
+        this.provider = null;
+        this.ytext = null;
+        this.updatePeriodMS = 100;
+        this.ele = ele;
+    }
+
+    saveContent() {
+        if (!this.currentObjId || !this.ytext || this.isReadOnly) return;
+        const content = this.editor.html();
+        this.db.doc.transact(() => {
+            if (this.currentObject) {
+                const ytext = this.currentObject.text;
+                ytext.delete(0, ytext.length);
+                ytext.insert(0, content);
+            }
+        });
+    }
+
+    view(obj:NObject) {
+        const objID = obj.id;
+        if (this.currentObjId === objID) return;
+        this.editorStop();
+
+        this.currentObject = obj;
+
+        // Check if current user is the author
+        this.isReadOnly = this.currentObject.author !== this.app.db.userID;
+        this.currentObjId = objID;
+
+        this.editorStart(objID);
+
+        const awareness = this.getAwareness();
+        awareness.setLocalStateField('cursor', null);
+
+        if (!this.isReadOnly) {
+            this.editor.on('select', () => {
+                const sel = window.getSelection();
+                if (sel!==null && sel.rangeCount > 0) {
+                    const range = sel.getRangeAt(0);
+                    awareness.setLocalStateField('cursor', {
+                        anchor: range.startOffset,
+                        head: range.endOffset
+                    });
+                }
+            });
+        }
+    }
+
+    editorStart(pageId:string):void {
+        this.ytext = this.db.objText(pageId);
+
+        this.ele.append(
+            this.renderControls(pageId),
+            this.renderMetadataPanel(),
+            this.renderToolbar(),
+            this.editor = this.renderEditor()
+        );
+
+        if (!this.isReadOnly && !this.editor.data('observer')) {
+            const observer = new MutationObserver(() => {
+                const content = this.editor.html();
+                this.ytext.doc.transact(() => {
+                    this.ytext.delete(0, this.ytext.length);
+                    this.ytext.insert(0, content);
+                });
+            });
+
+            observer.observe(this.editor[0], {
+                characterData: true,
+                childList: true,
+                subtree: true,
+                attributes: true
+            });
+
+            this.editor.data('observer', observer);
+        }
+
+        this.ytext.observe(event => {
+            const currentContent = this.editor.html();
+            const yContent = this.ytext.toString();
+            if (currentContent !== yContent)
+                this.editor.html(yContent);
+        });
+    }
+
+    editorStop() {
+        if (this.provider) {
+            this.provider.destroy();
+            this.provider = null;
+        }
+        if (this.editor) {
+            const observer = this.editor.data('observer');
+            if (observer) observer.disconnect();
+        }
+        this.ytext = null;
+        this.ele.empty();
+        this.currentObject = null;
+        this.isReadOnly = false;
+    }
+
+    renderMetadataPanel():JQuery {
+        if (!this.currentObject) return $('<div>');
+
+        return $('<div>', {
+            class: 'metadata-panel'
+        }).append(
+            $('<div>', { class: 'metadata-row' }).append(
+                $('<span>', { text: 'Created: ' }),
+                $('<span>', { text: new Date(this.currentObject.created).toLocaleString() })
+            ),
+            $('<div>', { class: 'metadata-row' }).append(
+                $('<span>', { text: 'Last Updated: ' }),
+                $('<span>', { text: new Date(this.currentObject.updated).toLocaleString() })
+            ),
+            $('<div>', { class: 'metadata-row' }).append(
+                $('<span>', { text: 'Author: ' }),
+                $('<span>', { text: this.currentObject.author })
+            ),
+            $('<div>', { class: 'metadata-tags' }).append(
+                $('<span>', { text: 'Tags: ' }),
+                this.renderTagsEditor()
+            )
+        );
+    }
+
+    renderTagsEditor():JQuery {
+        const tagsContainer = $('<div>', { class: 'tags-container' });
+
+        if (!this.isReadOnly) {
+            const addTagInput = $('<input>', {
+                type: 'text',
+                class: 'tag-input',
+                placeholder: 'Add tag...'
+            }).keypress(e => {
+                if (e.key === 'Enter') {
+                    const tag = $(e.target).val().toString().trim();
+                    if (tag) {
+                        this.currentObject.addTag(tag);
+                        $(e.target).val('');
+                        this.updateTagsDisplay(tagsContainer);
+                    }
+                }
+            });
+            tagsContainer.append(addTagInput);
+        }
+
+        this.updateTagsDisplay(tagsContainer);
+        return tagsContainer;
+    }
+
+    updateTagsDisplay(container:JQuery) {
+        const tagsDiv = container.find('.tags-list') || $('<div>', { class: 'tags-list' });
+        tagsDiv.empty();
+
+        this.currentObject.tags.forEach(tag => {
+            const tagElement = $('<span>', {
+                class: 'tag',
+                text: tag
+            });
+
+            if (!this.isReadOnly) {
+                tagElement.append(
+                    $('<button>', {
+                        class: 'remove-tag',
+                        text: '×'
+                    }).click(() => {
+                        this.currentObject.removeTag(tag);
+                        this.updateTagsDisplay(container);
+                    })
+                );
+            }
+
+            tagsDiv.append(tagElement);
+        });
+
+        if (!container.find('.tags-list').length) {
+            container.append(tagsDiv);
+        }
+    }
+
+    renderEditor():JQuery {
+        const content = this.ytext ? this.ytext.toString() : '';
+        return $('<div>', {
+            class: 'editor',
+            contenteditable: !this.isReadOnly,
+            spellcheck: true,
+            html: content
+        })
+            .on('input', debounce(() => this.saveContent(), this.updatePeriodMS))
+            .on('keydown', e => {
+                if (!this.isReadOnly && (e.ctrlKey || e.metaKey)) {
+                    switch (e.key.toLowerCase()) {
+                        case 'b':
+                            e.preventDefault();
+                            document.execCommand('bold');
+                            break;
+                        case 'i':
+                            e.preventDefault();
+                            document.execCommand('italic');
+                            break;
+                        case 'u':
+                            e.preventDefault();
+                            document.execCommand('underline');
+                            break;
+                    }
+                }
+            });
+    }
+
+    renderToolbar():JQuery {
+        if (this.isReadOnly) return $('<div>');
+
+        const toolbar = $('<div>', { class: 'toolbar' });
+        [
+            {command: 'bold', icon: '𝐁', title: 'Bold'},
+            {command: 'italic', icon: '𝐼', title: 'Italic'},
+            {command: 'underline', icon: 'U', title: 'Underline'},
+            {command: 'strikeThrough', icon: 'S', title: 'Strikethrough'},
+            {command: 'insertOrderedList', icon: '1.', title: 'Ordered List'},
+            {command: 'insertUnorderedList', icon: '•', title: 'Unordered List'},
+            {command: 'insertLink', icon: '🔗', title: 'Insert Link'},
+            {command: 'undo', icon: '↩️', title: 'Undo'},
+            {command: 'redo', icon: '↪️', title: 'Redo'},
+        ].forEach(({ command, icon, title }) => {
+            $('<button>', {
+                html: icon,
+                title: title,
+                disabled: this.isReadOnly
+            }).click(e => {
+                e.preventDefault();
+                if (command === 'insertLink') {
+                    const url = prompt('Enter the URL');
+                    if (url) document.execCommand(command, false, url);
+                } else {
+                    document.execCommand(command, false, null);
+                }
+            }).appendTo(toolbar);
+        });
+        return toolbar;
+    }
+
+    renderControls(pageId:string):JQuery {
+        const page = this.db.get(pageId);
+        if (!page) return $('<div>');
+
+        const controls = $('<div>').addClass('editor-controls');
+
+        // Title input
+        controls.append(this.renderTitleInput(page, pageId));
+
+        // Only show privacy toggle and template buttons if not read-only
+        if (!this.isReadOnly) {
+            controls.append(
+                this.renderPrivacyToggle(page, pageId),
+                this.renderTemplateButtons()
+            );
+        }
+
+        // Add read-only indicator if applicable
+        if (this.isReadOnly) {
+            controls.append(
+                $('<div>', {
+                    class: 'readonly-indicator',
+                    text: 'Read Only'
+                })
+            );
+        }
+
+        return controls;
+    }
+
+    renderTitleInput(page, pageId:string):JQuery {
+        return $('<input>', {
+            type: 'text',
+            class: 'title-input',
+            value: page.name,
+            placeholder: 'Page Title',
+            readonly: this.isReadOnly
+        }).on('change', (e) => {
+            if (!this.isReadOnly) {
+                this.currentObject.name = $(e.target).val();
+            }
+        });
+    }
+
+    renderPrivacyToggle(page, pageId:string) {
+        return $('<div>', {class: 'privacy-toggle'}).append(
+            $('<span>').text('Public'),
+            $('<label>', {class: 'toggle-switch'}).append(
+                $('<input>', {
+                    type: 'checkbox',
+                    checked: page.public,
+                    disabled: this.isReadOnly
+                }).on('change', e => {
+                    this.db.objPublic(pageId, e.target.checked);
+                    e.target.checked ?
+                        this.app.net.shareDocument(pageId) :
+                        this.app.net.unshareDocument(pageId);
+                }),
+                $('<span>', {class: 'toggle-slider'})
+            )
+        );
+    }
+
+    renderTemplateButtons():JQuery {
+        if (this.isReadOnly) return $('<div>');
+
+        const templateButtons = $('<div>', {class: 'template-buttons'});
+        [
+            {icon: '📝', title: 'Note Template', template: 'note'},
+            {icon: '📅', title: 'Meeting Template', template: 'meeting'},
+            {icon: '✅', title: 'Todo Template', template: 'todo'},
+            {icon: '📊', title: 'Report Template', template: 'report'}
+        ].forEach(({icon, title, template}) => {
+            $('<button>', {
+                class: 'template-button',
+                text: icon,
+                title: title,
+                disabled: this.isReadOnly
+            }).click(() => this.insertTemplate(template))
+                .appendTo(templateButtons);
+        });
+        return templateButtons;
+    }
+
+    insertTemplate(template:string):void {
+        if (this.isReadOnly) return;
+        let html = '<TEMPLATE>';
+        document.execCommand('insertHTML', false, html);
+    }
+}
+/*
+TODO
+
+import * as Y from 'yjs';
+import { Awareness } from 'y-protocols/awareness';
+
+export default class Editor {
+    // ... existing code ...
+
+    private awareness: Awareness;
+
+    constructor(ele: JQuery, db: DB, getAwareness: Function, app: App) {
+        // ... existing code ...
+        this.awareness = getAwareness();
+        this.setupAwareness();
+    }
+
+    private setupAwareness() {
+        // Listen for local cursor changes
+        this.editor.on('mouseup keyup', () => this.updateLocalCursor());
+
+        // Listen for awareness updates
+        this.awareness.on('change', () => this.renderRemoteCursors());
+    }
+
+    private updateLocalCursor() {
+        const sel = window.getSelection();
+        if (sel && sel.rangeCount > 0) {
+            const range = sel.getRangeAt(0);
+            this.awareness.setLocalStateField('cursor', {
+                anchor: range.startOffset,
+                head: range.endOffset,
+            });
+        }
+    }
+
+    private renderRemoteCursors() {
+        const states = this.awareness.getStates();
+        states.forEach((state, clientId) => {
+            if (clientId === this.awareness.clientID) return;
+            if (state.cursor) {
+                this.renderCursor(state.cursor, state.user);
+            }
+        });
+    }
+
+    private renderCursor(cursorData, user) {
+        // Remove existing cursor elements for this user
+        this.editor.find(`.remote-cursor-${user.id}`).remove();
+
+        // Create a new cursor element
+        const cursorEle = $('<span>', {
+            class: `remote-cursor remote-cursor-${user.id}`,
+            css: {
+                position: 'absolute',
+                backgroundColor: user.color,
+                width: '2px',
+                height: '1em',
+            },
+        });
+
+        // Position the cursor in the editor
+        // (You'll need to map cursorData.anchor to a position in the DOM)
+        // For simplicity, here's a placeholder implementation:
+        const position = this.getPositionFromOffset(cursorData.anchor);
+        cursorEle.css({ left: position.left, top: position.top });
+
+        this.editor.append(cursorEle);
+    }
+
+    private getPositionFromOffset(offset: number) {
+        // Implement a method to convert text offset to x,y coordinates
+        // This can be complex depending on your editor's implementation
+        return { left: 0, top: 0 }; // Placeholder
+    }
+
+    // ... existing code ...
+}
+
+// In editor.css
+
+.remote-cursor {
+    pointer-events: none;
+    z-index: 10;
+}
+ */
+
+
+===== ui/friends.view.ts =====
+
+import $ from "jquery";
+import '/ui/css/Friends.css';
+
+export default class FriendsView {
+    private readonly root: JQuery;
+    private readonly getAwareness: Function;
+    private readonly container: JQuery;
+
+    constructor(root:JQuery, getAwareness:Function) {
+        this.root = root;
+        this.getAwareness = getAwareness;
+        this.container = $('<div>').addClass('Friends-list-page');
+    }
+
+    render() {
+        this.container.empty();
+
+        this.root.find('.main-view').empty().append(this.container);
+
+        this.container.html(`
+            <h3>Friends</h3>
+            <ul></ul>
+        `);
+
+        const   updateFriends = () => {
+            const users: any[] = [];
+            this.getAwareness().getStates().forEach((state: { user: any; }) => {
+                if (state.user) users.push(state.user);
+            });
+
+            const ul = this.container.find('ul').empty();
+
+            this.item(users, ul);
+            //users.forEach(user => ul.append($('<li>').text(user.name).css('color', user.color)));
+        };
+
+        updateFriends();
+        this.getAwareness().on('change', updateFriends);
+    }
+
+    private item(users: any[], ul: JQuery<HTMLUListElement>) {
+        users.forEach(user => ul.append($('<li>').text(user.name)));
+    }
+}
+
+
+===== ui/match.view.js =====
+
+import $ from 'jquery';
+import '/ui/css/match.css';
+import {events} from '../src/events.ts';
+
+class MatchingView {
+    constructor(root, matching) {
+        this.matching = matching;
+        this.root = root;
+        this.ele = $('<div>').addClass('matching-dashboard');
+        this.updateInterval = 1000;
+        this.maxLogEntries = 50;
+        this.maxHistoryPoints = 100;
+        this.activityLog = [];
+        this.history = {
+            timestamps: [], pagesProcessed: [], matchesFound: [],
+            workerCapacity: [], queueSize: [], processingRate: []
+        };
+        this.settings = {
+            isProcessing: false,
+            workerCapacity: matching.workerCapacity,
+            processInterval: matching.processInterval / 1000,
+            similarityThreshold: 0.5,
+            autoAdjustCapacity: true
+        };
+
+        events.on('matching-metrics', e => this.updateMetrics(e.detail));
+        events.on('activity', e => this.logActivity(e));
+    }
+
+    template() {
+        const s = this.settings;
+        return `
+            <div class="control-panel">
+                <div class="panel-section controls">
+                    ${this.renderControl('switch', 'Processing', 'processing-toggle')}
+                    ${this.renderControl('slider', 'Worker Capacity', 'capacity-slider', s.workerCapacity * 100)}
+                    ${this.renderControl('number', 'Process Interval', 'interval-input', s.processInterval, 's')}
+                    ${this.renderControl('slider', 'Similarity Threshold', 'similarity-slider', s.similarityThreshold * 100)}
+                    ${this.renderControl('switch', 'Auto-Adjust', 'auto-adjust-toggle', s.autoAdjustCapacity)}
+                </div>
+            </div>
+            <div class="dashboard-grid">
+                ${this.renderStatusPanel()}
+                ${this.renderActivityPanel()}
+                ${this.renderMatchesPanel()}
+                ${this.renderPerformancePanel()}
+            </div>`;
+    }
+
+    renderControl(type, label, id, value = '', suffix = '') {
+        const controls = {
+            switch: () => `
+                <label class="switch-label">${label}
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="${id}" ${value ? 'checked' : ''}>
+                        <span class="toggle-slider"></span>
+                    </label>
+                </label>`,
+            slider: () => `
+                <label>${label}
+                    <input type="range" id="${id}" min="0" max="100" value="${value}">
+                    <span id="${id}-value">${value.toFixed(1)}%</span>
+                </label>`,
+            number: () => `
+                <label>${label}
+                    <input type="number" id="${id}" min="1" max="60" value="${value}">${suffix}
+                </label>`
+        };
+        return `<div class="control-group">${controls[type]()}</div>`;
+    }
+
+    renderStatusPanel() {
+        return `
+            <div class="dashboard-cell status-panel">
+                <h3>Processing Status</h3>
+                <div class="status-indicators">
+                    ${['processing-rate', 'queue-size'].map(id => `
+                        <div class="status-row">
+                            <div class="indicator">
+                                <div class="indicator-label">${id.replace('-', ' ').toUpperCase()}</div>
+                                <div class="indicator-value" id="${id}">0</div>
+                                <div class="indicator-bar">
+                                    <div class="bar-fill" id="${id}-bar" style="width: 0%"></div>
+                                </div>
+                            </div>
+                        </div>
+                    `).join('')}
+                    <div class="status-row">
+                        ${this.renderMetricPair('pages-processed', 'matches-found')}
+                    </div>
+                    <div class="status-row">
+                        ${this.renderMetricPair('peers-count', 'worker-capacity')}
+                    </div>
+                </div>
+            </div>`;
+    }
+
+    renderMetricPair(id1, id2) {
+        return ['metric', id1, id2].reduce((html, id) =>
+            html + `<div class="${id}"><span class="${id}-label"></span>
+            <span class="${id}-value" id="${id}">0</span></div>`, '');
+    }
+
+    renderActivityPanel() {
+        return `
+            <div class="dashboard-cell activity-panel">
+                <h3>Activity Log</h3>
+                <div class="activity-feed" id="activity-log"></div>
+            </div>`;
+    }
+
+    renderMatchesPanel() {
+        return `
+            <div class="dashboard-cell matches-panel">
+                <h3>Recent Matches</h3>
+                <div class="matches-list" id="matches-list"></div>
+            </div>`;
+    }
+
+    renderPerformancePanel() {
+        return `
+            <div class="dashboard-cell performance-panel">
+                <h3>Performance History</h3>
+                <div class="performance-chart" id="performance-chart">
+                    <canvas id="history-canvas"></canvas>
+                </div>
+            </div>`;
+    }
+
+    render() {
+        this.ele.empty();
+        this.root.find('.main-view').empty().append(this.ele);
+        this.ele.html(this.template());
+        this.bindControls();
+        this.startUpdates();
+        return this.ele;
+    }
+
+    bindControls() {
+        const controls = {
+            'processing-toggle': (e) => {
+                this.settings.isProcessing = e.target.checked;
+                this.matching[e.target.checked ? 'startProcessing' : 'stopProcessing']();
+                this.logActivity({
+                    type: 'system',
+                    message: `Processing ${e.target.checked ? 'started' : 'stopped'}`,
+                    icon: e.target.checked ? '▶️' : '⏹️'
+                });
+            },
+            'capacity-slider': (e) => {
+                const value = e.target.value / 100;
+                this.settings.workerCapacity = value;
+                this.ele.find('#capacity-value').text(e.target.value + '%');
+                if (!this.settings.autoAdjustCapacity) {
+                    this.matching.setWorkerCapacity(value);
+                    this.logActivity({
+                        type: 'config',
+                        message: `Worker capacity: ${e.target.value}%`,
+                        icon: '⚡'
+                    });
+                }
+            },
+            'interval-input': (e) => {
+                const value = Math.max(1, Math.min(60, parseInt(e.target.value)));
+                this.settings.processInterval = value;
+                this.matching.setProcessInterval(value * 1000);
+                this.logActivity({
+                    type: 'config',
+                    message: `Interval: ${value}s`,
+                    icon: '⏱️'
+                });
+            },
+            'similarity-slider': (e) => {
+                const value = e.target.value / 100;
+                this.settings.similarityThreshold = value;
+                this.ele.find('#similarity-value').text(e.target.value + '%');
+                this.matching.setSimilarityThreshold(value);
+                this.logActivity({
+                    type: 'config',
+                    message: `Threshold: ${e.target.value}%`,
+                    icon: '🎯'
+                });
+            },
+            'auto-adjust-toggle': (e) => {
+                this.settings.autoAdjustCapacity = e.target.checked;
+                this.matching.setAutoAdjust(e.target.checked);
+                this.ele.find('#capacity-slider').prop('disabled', e.target.checked);
+                this.logActivity({
+                    type: 'config',
+                    message: `Auto-adjust: ${e.target.checked ? 'on' : 'off'}`,
+                    icon: '🔄'
+                });
+            }
+        };
+
+        Object.entries(controls).forEach(([id, handler]) =>
+            this.ele.find(`#${id}`).on('change input', handler));
+    }
+
+    logActivity(event) {
+        const entry = { ...event, timestamp: new Date().toLocaleTimeString(), id: Date.now() };
+        this.activityLog.unshift(entry);
+        this.activityLog = this.activityLog.slice(0, this.maxLogEntries);
+
+        const $log = this.ele.find('#activity-log');
+        const $newEntry = $(`
+            <div class="activity-entry ${event.type}" style="opacity: 0">
+                <span class="activity-icon">${event.icon}</span>
+                <span class="activity-message">${event.message}</span>
+                <span class="activity-time">${entry.timestamp}</span>
+            </div>
+        `).prependTo($log).animate({ opacity: 1 }, 300);
+
+        if ($log.children().length > this.maxLogEntries) {
+            $log.children().last().fadeOut(300, function() { $(this).remove(); });
+        }
+    }
+
+    updateMetrics(metrics) {
+        Object.entries(metrics).forEach(([key, value]) =>
+            this.animateValue(`#${key}`, value));
+
+        const rate = metrics.processingRate || 0;
+        $('#processing-rate').text(`${rate.toFixed(1)}/s`);
+        $('#rate-bar').css('width', `${Math.min(rate * 10, 100)}%`);
+        $('#queue-bar').css('width', `${Math.min((metrics.queueSize / 20) * 100, 100)}%`);
+        $('#worker-capacity').text(`${(metrics.workerCapacity * 100).toFixed(1)}%`);
+
+        this.updateHistory(metrics);
+        this.updateMatches(metrics.recentMatches || []);
+    }
+
+    animateValue(selector, newValue) {
+        const $el = this.ele.find(selector);
+        const current = parseInt($el.text());
+        if (current !== newValue) {
+            $el.prop('counter', current).animate({ counter: newValue }, {
+                duration: 500,
+                step: function(now) { $(this).text(Math.ceil(now)); }
+            });
+        }
+    }
+
+    updateHistory(metrics) {
+        Object.entries(metrics).forEach(([key, value]) => {
+            if (key in this.history) {
+                this.history[key].push(value);
+                if (this.history[key].length > this.maxHistoryPoints) {
+                    this.history[key] = this.history[key].slice(-this.maxHistoryPoints);
+                }
+            }
+        });
+        this.updateChart();
+    }
+
+    updateMatches(matches) {
+        const $list = this.ele.find('#matches-list');
+        matches.forEach(match => {
+            $(`
+                <div class="match-entry" style="opacity: 0">
+                    <div class="match-header">
+                        <span class="match-title">${match.pageA} ↔ ${match.pageB}</span>
+                        <span class="match-score">${(match.similarity * 100).toFixed(1)}%</span>
+                    </div>
+                    <div class="match-details">
+                        <div class="match-properties">${match.matchedProperties.join(', ')}</div>
+                        <div class="match-time">${new Date(match.timestamp).toLocaleTimeString()}</div>
+                    </div>
+                </div>
+            `).prependTo($list).animate({ opacity: 1 }, 300);
+        });
+
+        while ($list.children().length > 10) {
+            $list.children().last().fadeOut(300, function() { $(this).remove(); });
+        }
+    }
+
+    startUpdates() {
+        if (this.updateTimer) clearInterval(this.updateTimer);
+        this.updateTimer = setInterval(() =>
+            this.updateMetrics(this.matching.getMetrics()), this.updateInterval);
+    }
+
+    stop() {
+        if (this.updateTimer) {
+            clearInterval(this.updateTimer);
+            this.updateTimer = null;
+        }
+    }
+
+    updateChart() {
+        //TODO
+    }
+}
+
+export default MatchingView;
+
+===== ui/me.view.ts =====
+
+import $ from 'jquery';
+import * as Y from 'yjs';
+
+interface UserPresence {
+    userId: string;
+    cursor: {
+        position: number;
+        selection?: [number, number];
+    };
+    lastActive: number;
+    status: 'active' | 'idle' | 'away';
+}
+
+class PresenceManager {
+    private awareness: Y.Awareness;
+    private presenceTimeout: number = 30000; // 30 seconds
+
+    constructor(doc: Y.Doc) {
+        this.awareness = new Y.Awareness(doc);
+        this.startPresenceTracking();
+    }
+
+    private startPresenceTracking() {
+        setInterval(() => {
+            const states = this.awareness.getStates();
+            states.forEach((state, clientId) => {
+                if (Date.now() - state.lastActive > this.presenceTimeout) {
+                    this.awareness.setLocalState({ status: 'away' });
+                }
+            });
+        }, 5000);
+    }
+}
+
+export default class MeView {
+    private readonly getUser: Function;
+    private awareness: Function;
+    private $: (element) => JQueryStatic;
+
+    constructor(ele, getUser, awareness) {
+        this.getUser = getUser;
+        this.awareness = awareness;
+        this.$ = element => $(element, ele);
+    }
+
+    render() {
+        const user = this.getUser();
+        const listener = e => this.awareness().setLocalStateField('user', {
+            ...user,
+            [e.target.id.replace('user-', '')]: e.target.value
+        });
+
+        // Clear and get container
+        this.$('.main-view').empty().append(
+            $('<div/>', {
+                class: 'profile-page'
+            }).append(
+                $('<div/>', {
+                    class: 'profile-field'
+                }).append(
+                    $('<label/>', {
+                        for: 'user-name',
+                        text: 'Name: '
+                    }),
+                    $('<input/>', {
+                        type: 'text',
+                        class: 'user-name',
+                        placeholder: 'Name',
+                        value: user.name
+                    }).on('input', listener)
+                ),
+                $('<div/>', { class: 'profile-field' }).append(
+                    $('<label/>', {
+                        for: 'user-color',
+                        text: 'Color: '
+                    }),
+                    $('<input/>', {
+                        type: 'color',
+                        class: 'user-color',
+                        value: user.color
+                    }).on('input', listener)
+                )
+            )
+        );
+    }
+}
+
+===== ui/net.view.js =====
+
+import $ from 'jquery';
+import {events} from '../src/events.ts';
+
+import '/ui/css/net.css';
+
+class BootstrapView {
+    constructor(net) {
+        this.net = net;
+        this.addButton = $('<button>').text("+"); //#add-bootstrap-server
+        this.$input = $('<input>').attr('placeholder', 'bootstrap'); //#new-bootstrap-server
+        this.$nodeList = $('<div>');//#bootstrap-server-list
+
+        this.addButton.click(() => {
+            const url = this.$input.val().trim();
+            if (this.validateURL(url)) {
+                this.net.addBootstrap(url);
+                this.$input.val('');
+                this.update();
+            } else {
+                alert('Please enter a valid signaling server URL.');
+            }
+        });
+
+        this.$nodeList.on('click', '.remove-server', (e) => {
+            const url = $(e.target).data('url');
+            this.net.removeBootstrap(url);
+            this.update();
+        });
+        this.update();
+    }
+
+    validateURL(url) {
+        try {
+            new URL(url);
+            return true;
+        } catch {
+            return false;
+        }
+    }
+
+    update() {
+        const nodes = this.net.signalingServers;
+        this.$nodeList.empty();
+        nodes.forEach(url => {
+            this.$nodeList.append(`
+                <li>
+                    ${url}
+                    <button class="remove-node" data-url="${url}">Remove</button>
+                </li>
+            `);
+        });
+    }
+
+    panel() {
+        return $('<div>').append('<h2>Bootstrap Nodes</h2>', this.$nodeList, this.$input, this.addButton);
+    }
+}
+
+
+class NetViewer  {
+    constructor(net) {
+        this.net = net;
+        this.ele = $('<div>').addClass('net-viewer');
+        this.events = [];
+        this.maxEvents = 100;
+        this.bootstrap = new BootstrapView(net);
+        this.render();
+        events.on('networkActivity', e => this.update(e.detail));
+    }
+
+    render() {
+        $(this.ele).append(`
+            <h3>Network</h3>
+            <div class="stats-grid">
+                <div class="stat-box messages">
+                    <strong>Messages</strong>
+                    <div>Sent: <span class="sent">0</span></div>
+                    <div>Received: <span class="received">0</span></div>
+                </div>
+                <div class="stat-box bandwidth">
+                    <strong>Bandwidth</strong>
+                    <div>Total: <span class="bytes">0</span> bytes</div>
+                </div>
+            </div>
+            <div class="stat-box">
+                <strong>Connections</strong>
+                <div class="peers"></div>
+            </div>
+            <div class="stat-box">
+                <strong>Events</strong>
+                <div class="event-log"></div>
+            </div>
+        `, this.bootstrap.panel());
+    }
+
+    update(eventData) {
+        const { type, data, timestamp } = eventData;
+        const stats = data.stats;
+
+        // Update metrics
+        let r = this.ele[0];
+        r.querySelector('.sent').textContent = stats.messagesSent;
+        r.querySelector('.received').textContent = stats.messagesReceived;
+        r.querySelector('.bytes').textContent = stats.bytesTransferred;
+
+        // Update peer list
+        const peerList = r.querySelector('.peers');
+        peerList.innerHTML = stats.awareness.map(peer => `
+            <div class="peer-badge">
+                ${peer.metadata.clientID}
+                (${new Date(peer.lastActive).toLocaleTimeString()})
+            </div>
+        `).join('');
+
+        // Add event to log
+        this.events.unshift({type, timestamp, data});
+        this.events = this.events.slice(0, this.maxEvents);
+
+        // Update event log
+        r.querySelector('.event-log').innerHTML = this.events.map(event => `
+            <div class="event-entry ${event.type}">
+                [${new Date(event.timestamp).toLocaleTimeString()}] ${event.type}
+                ${event.data.peerId ? `(Peer: ${event.data.peerId})` : ''}
+                ${event.data.bytes ? `(${event.data.bytes} bytes)` : ''}
+            </div>
+        `).join('');
+    }
+}
+
+export default class NetView {
+    constructor(ele, net) {
+        this.ele = ele;
+        this.net = net;
+    }
+
+    render() {
+        const updateStatus = () => this.ele.empty().append(
+            new NetViewer(this.net).ele //'<network-view></network-view>'
+        );
+        this.net.net.on('peers', updateStatus);
+        updateStatus();
+    }
+}
+
+
+===== ui/obj.view.mini.ts =====
+
+import $ from "jquery";
+import NObject from '../src/obj';
+import {YEvent} from "yjs";
+
+export default class ObjViewMini {
+    public readonly ele: JQuery;
+    private obj: NObject;
+
+    constructor(obj: NObject) {
+        this.obj = obj;
+        this.ele = $('<li>').addClass('obj-view-mini').css({
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center'
+        });
+
+        const observer: (e: YEvent<any>[]) => void = (e) => {
+            const kc: Set<string> = e[0].keysChanged;
+            if (kc.has('name') || kc.has('public'))
+                setTimeout(()=> this.render());
+        };
+        this.obj.observe(observer);
+        this.ele.on("remove", () => this.obj.unobserve(observer));
+
+        this.render();
+    }
+
+    private render() {
+        const title = $('<span>').addClass('obj-title').text(this.obj.name);
+        const publicStatus = $('<span>').addClass('obj-public').text(this.obj.public ? 'Public' : 'Private');
+
+        this.ele.empty().append(title, publicStatus);
+    }
+}
+
+===== ui/sidebar.ts =====
+
+import $ from "jquery";
+
+import App from './app'
+import DB from '../src/db'
+import ObjViewMini from './obj.view.mini'
+
+import MeView from "./me.view";
+import FriendsView from "./Friends.view";
+import NetView from "./net.view.js";
+import DBView from "./db.view.js";
+import MatchingView from "./match.view.js";
+import '/ui/css/sidebar.css';
+
+class PageContextMenu {
+    readonly ele: JQuery;
+    private db: DB;
+    private sidebar: Sidebar;
+    private selectedPageId: string;
+
+    constructor(db:DB, app:Sidebar) {
+        this.db = db;
+        this.sidebar = app;
+        this.selectedPageId = null;
+        this.ele = $('<div>').addClass('context-menu').html(`
+            <ul>
+                <li data-action="rename-page">Rename</li>
+                <li data-action="delete-page">Delete</li>
+            </ul>
+        `);
+
+        //handle clicks outside the menu
+        // $(this.ele).click(e => {
+        //     if (!this.ele.has(e.target).length)
+        //         this.hide();
+        // });
+        $(document).click(e => {
+            if (!$(e.target).closest('#context-menu').length)
+                this.hide();
+        });
+
+        this.ele.on('click', 'li', e => {
+            const action = $(e.target).data('action');
+            if (!action) return;
+            if (action === 'rename-page') this.renamePage();
+            else if (action === 'delete-page') this.deletePage();
+            this.hide();
+        });
+    }
+
+    renamePage() {
+        if (this.selectedPageId) {
+            const newName = prompt('Enter new page name:');
+            if (newName) this.db.objName(this.selectedPageId, newName);
+        }
+    }
+
+    deletePage() {
+        if (this.selectedPageId && confirm('Are you sure you want to delete this page?')) {
+            this.db.delete(this.selectedPageId);
+            if (this.db.get(this.selectedPageId)?.public) this.sidebar.app.net.unshareDocument(this.selectedPageId);
+        }
+    }
+
+    showContextMenu(event:ContextMenuEvent, pageId:string) {
+        event.preventDefault();
+        this.selectedPageId = pageId;
+        this.ele.css({
+            top: event.clientY,
+            left: event.clientX,
+            display: 'block'
+        });
+    }
+
+    hide() {
+        this.ele.hide();
+    }
+}
+
+import ContextMenuEvent = JQuery.ContextMenuEvent;
+
+export default class Sidebar {
+    readonly ele: JQuery;
+    private readonly db: DB;
+    private readonly meView: MeView;
+    private readonly friendsView: FriendsView;
+    private readonly netView: NetView;
+    private readonly dbView: DBView;
+    private readonly matchingView: MatchingView;
+    public app: App;
+    private contextMenu: PageContextMenu;
+    private pageList: JQuery;
+
+    constructor(app:App) {
+        const root = app.ele;
+
+        this.ele = $('<div>').addClass('sidebar');
+
+        this.app = app;
+        this.db = app.db;
+
+        const thisAware = app.awareness.bind(app);
+        this.meView = new MeView(root, app.user.bind(app), thisAware);
+        this.friendsView = new FriendsView(root, thisAware);
+        this.netView = new NetView(root.find('.main-view'), app.net);
+        this.dbView = new DBView(root, this.db);
+        this.matchingView = new MatchingView(root, app.match);
+
+
+        this.ele.append(this.menu());
+        this.contextMenu = new PageContextMenu(this.db, this);
+        root.append(this.contextMenu.ele);
+
+        this.ele.append(this.pageList = $('<ul>', {class: 'page-list'}));
+
+        this.db.index.observe(() => this.updatePageList());
+
+        this.updatePageList();
+    }
+
+    menu() {
+        const menuBar = $('<div>', {
+            class: 'menubar'
+        }).append(
+            $('<button>', {
+                class: 'menubar-button add-page-button',
+                text: '+',
+                title: 'Add New Page'
+            }).click(() => {
+                const p = this.db.create();
+                p.name = 'Empty';
+                p.public = false;
+                this.app.editor.view(p);
+            })
+        );
+
+        [
+            {id: 'profile',  title: 'Me'},
+            {id: 'friends',  title: 'Friends'},
+            {id: 'network',  title: 'Net'},
+            {id: 'database', title: 'DB'},
+            {id: 'matching', title: 'Matching'},
+        ].forEach(view => {
+            let v;
+            switch (view.id) {
+                case 'profile': v = this.meView; break;
+                case 'friends': v = this.friendsView; break;
+                case 'network': v = this.netView; break;
+                case 'database': v = this.dbView; break;
+                case 'matching': v = this.matchingView; break;
+                default: console.warn(`No page class defined for ${view.id}`);
+            }
+
+            menuBar.append($('<button>', {
+                class: 'menubar-button',
+                text: view.title,
+                title: view.title
+            }).click(() => v.render()));
+        });
+
+        return menuBar;
+    }
+
+    updatePageList() {
+        const nextPageList: JQuery[] = [];
+        this.db.index.forEach((_value, key) => {
+            const obj = this.db.get(key);
+            if (obj) {
+                const v = new ObjViewMini(obj);
+                v.ele.attr('data-page-id', key)
+                    .on('contextmenu', (e: JQuery.Event) => {
+                        e.preventDefault();
+                        this.contextMenu.showContextMenu(e, key);
+                    })
+                    .on('click', ()=>{
+                        this.app.editor.view(obj);
+                    });
+                nextPageList.push(v.ele);
+            }
+        });
+        this.pageList.empty().append(nextPageList);
+    }
+
+    // updatePageList() {
+    //     const nextPageList:JQuery[] = [];
+    //     this.db.index.forEach((_value, key) => {
+    //
+    //         const value = this.db.get(key);
+    //         let name = value.name;
+    //         const li = $('<li>', {
+    //             text: name,
+    //             'data-page-id': key,
+    //             title: `Open ${name}`,
+    //             class: 'user-page-item'
+    //         });
+    //
+    //         if (value.public)
+    //             li.append($('<span>', {text: ' 🌐',  title: 'Public Document'}));
+    //
+    //         li.on({
+    //             click: () => this.app.editor.view(this.db.get(key)),
+    //             contextmenu: e => {
+    //                 e.preventDefault();
+    //                 this.contextMenu.showContextMenu(e, key);
+    //             },
+    //             dblclick: () => { }
+    //         });
+    //
+    //         nextPageList.push(li);
+    //     });
+    //     this.pageList.empty().append(nextPageList);
+    // }
+}
+
+
+===== ui/test/components.html =====
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UI Elements</title>
+    <link id="theme-stylesheet" rel="stylesheet" href="../css/light-mode.css">
+    <script src="../../node_modules/jquery/dist/jquery.min.js"></script>
+    <script type="text/javascript">
+        function open_modal(){
+            $("#modal1").show();
+        }
+        function close_modal(){
+            $("#modal1").hide();
+        }
+
+    </script>
+</head>
+<body>
+
+<header>
+    <button id="theme-toggle" class="theme-toggle">Switch to Dark Mode</button>
+</header>
+
+<p>
+Here's a comprehensive list of user interface components found in modern web browsers, including form inputs and interactive elements. Each component will be paired with a basic CSS example to demonstrate styling.
+</p>
+<h2>1. Input Elements</h2>
+<h4>Text Input</h4>
+<input type="text" placeholder="Enter text here">
+<br/>
+<h4>Password Input</h4>
+
+<input type="password" placeholder="Enter password">
+<br/>
+
+<h4>Search Input</h4>
+
+<input type="search" placeholder="Search...">
+<br/>
+
+<h4>Email Input</h4>
+
+<input type="email" placeholder="Enter your email">
+<br/>
+
+<h2>2. Buttons</h2>
+<h4>Submit Button</h4>
+
+<button type="submit">Submit</button>
+<br/>
+
+<h4>Reset Button</h4>
+
+<button type="reset">Reset</button>
+<br/>
+
+
+<h2>3. Select Dropdown</h2>
+
+<select>
+    <option value="1">Option 1</option>
+    <option value="2">Option 2</option>
+</select>
+<br/>
+
+<h2>4. Checkboxes</h2>
+
+<input type="checkbox" id="check1">
+<label for="check1">Check me</label>
+<br/>
+
+<h2>5. Radio Buttons</h2>
+
+<input type="radio" id="radio1" name="group1">
+<label for="radio1">Option 1</label>
+<input type="radio" id="radio2" name="group1">
+<label for="radio2">Option 2</label>
+<br/>
+
+<h2>6. Textarea</h2>
+<textarea rows="4" cols="50" placeholder="Enter your text"></textarea>
+<br/>
+
+<h2>7. Range Slider</h2>
+
+<input type="range" min="0" max="100">
+<br/>
+
+<h2>8. File Input</h2>
+<br/>
+
+<input type="file">
+<br/>
+
+
+<h2>9. Progress Bar</h2>
+
+<progress value="50" max="100"></progress>
+<br/>
+
+<h2>10. Navigation Links</h2>
+
+<a href="#home">Home</a>
+<a href="#about">About</a>
+<br/>
+
+<h2>11. Table</h2>
+
+<table>
+    <thead>
+    <tr>
+        <th>Name</th>
+        <th>Age</th>
+    </tr>
+    </thead>
+    <tbody>
+    <tr>
+        <td>John</td>
+        <td>25</td>
+    </tr>
+    </tbody>
+</table>
+<br/>
+
+
+<h2>12. Modal Dialog (Custom)</h2>
+<button onclick="open_modal();">Open</button>
+
+<div id="modal1" class="modal">
+    <div class="modal-content">
+        <p>Modal content goes here.</p>
+        <button onclick="close_modal();">Close</button>
+    </div>
+
+</div>
+</br>
+<script src="theme-toggle.js"></script>
+
+
+</body>
+</html>
+
+===== ui/test/theme-toggle.js =====
+
+// Select the toggle button and the stylesheet link element
+const themeToggleButton = document.getElementById('theme-toggle');
+const themeStylesheet = document.getElementById('theme-stylesheet');
+
+// Set up the theme toggle logic
+themeToggleButton.addEventListener('click', () => {
+    if (themeStylesheet.getAttribute('href') === '../css/light-mode.css') {
+        themeStylesheet.setAttribute('href', '../css/dark-mode.css');
+        themeToggleButton.textContent = 'Switch to Light Mode';
+    } else {
+        themeStylesheet.setAttribute('href', '../css/light-mode.css');
+        themeToggleButton.textContent = 'Switch to Dark Mode';
+    }
+});
+
+
+===== vite.config.js =====
+
+import {defineConfig} from 'vite';
+
+export default defineConfig({
+    plugins: [
+    ],
+    build: {
+        sourcemap: true,
+        target: 'esnext',
+        outDir: 'dist'
+    }
+});
+
+===== vitest.config.js =====
+
+import {defineConfig} from 'vitest/config';
+
+export default defineConfig({
+    test: {
+        globals: true,
+        environment: 'happy-dom',
+        setupFiles: ['./test/setup.js'],
+        coverage: {
+            provider: 'v8',
+            reporter: ['text', 'json', 'html'],
+            exclude: [
+                'node_modules/**',
+                'tests/**'
+            ],
+        },
+        include: ['test/**/*.test.js']
+    },
+});
+
+

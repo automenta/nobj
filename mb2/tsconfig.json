@@ -1,0 +1,13 @@
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "lib": ["ESNext", "dom"],
+    "types": ["node"],
+    "strict": true,
+    "allowJs": true,
+    "inlineSources": true,
+    "inlineSourceMap": true,
+    "moduleResolution": "bundler"
+  },
+  "include": ["**/*.ts","**/*.js"]
+}
